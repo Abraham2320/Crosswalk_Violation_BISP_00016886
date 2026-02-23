@@ -3,7 +3,7 @@ from config import *
 
 from detector.yolo_detector import YOLODetector
 from detector.tracker import ObjectFSM
-
+from collections import deque
 from geometry.crosswalk import CrosswalkZone
 from geometry.polygon_editor import PolygonEditor
 from logic.violation import ViolationDetector
@@ -27,9 +27,7 @@ def main():
 
     cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL)
 
-    # -------------------------
     # Polygon Calibration
-    # -------------------------
     editor = PolygonEditor(WINDOW_NAME)
     polygon_loaded = editor.load()
     cv2.setMouseCallback(WINDOW_NAME, editor.mouse_callback)
@@ -71,11 +69,12 @@ def main():
     violation_detector = ViolationDetector(polygon)
 
     pedestrians_zones = {}   # {ped_id: "upper"/"lower"}
-    vehicles_inside = set()
-
-    # -------------------------
+    pedestrians_progress = {}  # {id: {...}}
+    history_length = 8
+    direction_threshold = 6
+    vehicles_inside = set() 
+    direction_threshold = 3  # pixels
     # Main Loop
-    # -------------------------
     while True:
         ret, frame = cap.read()
         if not ret:
@@ -109,7 +108,7 @@ def main():
                 cx = int((x1 + x2) / 2)
                 cy = int(y2)
 
-                # Geometry inside main crosswalk
+                # geometry inside main crosswalk
                 if obj_class == "person":
                     inside = crosswalk.intersects_box(box, min_ratio=0.005)
                 else:
@@ -119,28 +118,51 @@ def main():
 
                 violation_active = False
 
-                # -------------------------
-                # PEDESTRIAN LOGIC
-                # -------------------------
+                # pedestrian logic
                 if obj_class == "person":
 
                     if inside:
+
+                        ped_data = pedestrians_progress.get(obj_id)
+
+                        if ped_data is None:
+                            # initialize buffer
+                            pedestrians_progress[obj_id] = {
+                                "y_history": deque(maxlen=history_length),
+                                "zone": None,
+                                "direction": "STATIC"
+                            }
+                            ped_data = pedestrians_progress[obj_id]
+
+                        ped_data["y_history"].append(cy)
+
+                        # Determine zone (keep your logic)
                         zone = None
                         if crosswalk.intersects_polygon(box, upper_poly, 0.005):
                             zone = "upper"
                         elif crosswalk.intersects_polygon(box, lower_poly, 0.005):
                             zone = "lower"
 
-                        if zone:
-                            pedestrians_zones[obj_id] = zone
-                        else:
-                            pedestrians_zones.pop(obj_id, None)
-                    else:
-                        pedestrians_zones.pop(obj_id, None)
+                        ped_data["zone"] = zone
 
-                # -------------------------
-                # VEHICLE LOGIC
-                # -------------------------
+                        # ----- Compute smooth direction -----
+                        if len(ped_data["y_history"]) >= history_length:
+
+                            dy = ped_data["y_history"][-1] - ped_data["y_history"][0]
+
+                            if abs(dy) > direction_threshold:
+
+                                if dy > 0:
+                                    ped_data["direction"] = "DOWN"
+                                else:
+                                    ped_data["direction"] = "UP"
+                            else:
+                                ped_data["direction"] = "STATIC"
+
+                    else:
+                        pedestrians_progress.pop(obj_id, None)
+                        
+                # vehicle logic
                 else:
 
                     if state == "inside":
@@ -154,12 +176,13 @@ def main():
                     elif crosswalk.intersects_polygon(box, lower_poly):
                         vehicle_zone = "lower"
 
+                    # call violation logic
                     violation_active = violation_detector.detect_violation(
                         obj_id=obj_id,
                         obj_class=obj_class,
                         obj_state=state,
                         vehicle_zone=vehicle_zone,
-                        pedestrians_zones=list(pedestrians_zones.values())
+                        pedestrians_data=list(pedestrians_progress.values())
                     )
 
                 # -------------------------
@@ -174,6 +197,19 @@ def main():
 
                 draw_box(frame, box, obj_class, box_color)
 
+                if obj_class == "person":
+                    ped_data = pedestrians_progress.get(obj_id)
+                    if ped_data:
+                        cv2.putText(
+                            frame,
+                            ped_data["direction"],
+                            (cx, cy - 40),
+                            cv2.FONT_HERSHEY_SIMPLEX,
+                            0.6,
+                            (255, 255, 0),
+                            2
+                        )
+                        
                 cv2.putText(
                     frame,
                     state,
