@@ -1,0 +1,7 @@
+City Traffic Enforcement Unit
+Violation ID: 508eec2b-e258-409d-a5d8-2a9fa976521a
+Plate Number: UNREADABLE
+Violation Type: crosswalk_violation
+Date: 2026-03-19T17:20:49.941568+00:00
+Fine Amount: $150.00
+Payment due within 30 days.

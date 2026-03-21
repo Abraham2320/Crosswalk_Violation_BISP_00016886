@@ -1,5 +1,6 @@
 from ultralytics import YOLO
 
+
 class YOLODetector:
     def __init__(self, model_path, classes, conf, imgsz):
         self.model = YOLO(model_path)
