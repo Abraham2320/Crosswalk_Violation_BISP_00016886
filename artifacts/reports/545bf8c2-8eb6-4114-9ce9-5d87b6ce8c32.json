@@ -1,0 +1,36 @@
+{
+  "violation_id": "545bf8c2-8eb6-4114-9ce9-5d87b6ce8c32",
+  "timestamp": "2026-04-04T09:27:17.781513+00:00",
+  "vehicle_id": 60,
+  "frame_index": 955,
+  "vehicle_bbox": [
+    1002,
+    511,
+    1507,
+    705
+  ],
+  "vehicle_zone": "upper",
+  "polygon": [
+    [
+      804,
+      591
+    ],
+    [
+      931,
+      587
+    ],
+    [
+      1581,
+      1061
+    ],
+    [
+      984,
+      1065
+    ]
+  ],
+  "pedestrian_direction": "STATIC",
+  "pedestrian_zone": "upper",
+  "confidence": 1.0,
+  "location": "Crosswalk A",
+  "violation_type": "crosswalk_violation"
+}

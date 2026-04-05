@@ -1,0 +1,26 @@
+# Custom ByteTrack configuration
+# Task 2 tuning: reduce ghost tracks, stricter re-association, longer ID survival
+
+tracker_type: bytetrack
+
+# Detection confidence gate for "high-confidence" tracks
+track_high_thresh: 0.6      # was 0.5 — reduces low-confidence ghost tracks
+
+# Minimum confidence to initialise a brand-new track
+new_track_thresh: 0.6
+
+# IOU match threshold for re-associating detections to existing tracks
+# Higher = stricter (less likely to swap IDs across nearby objects)
+match_thresh: 0.85           # was 0.8
+
+# Frames a lost track survives before being deleted (30 fps × 2 s = 60)
+track_buffer: 60             # was 30
+
+# Low-confidence detections still considered for second-round matching
+track_low_thresh: 0.1
+
+# Minimum box side length in pixels (ignore tiny detections)
+min_box_area: 10
+
+# Use Gaussian motion model (smoother centroid predictions)
+fuse_score: true

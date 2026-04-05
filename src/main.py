@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 from collections import deque
 
 import cv2
@@ -12,7 +13,7 @@ from config import (
     VIDEO_PATH,
     settings,
 )
-from detector.tracker import ObjectFSM
+from detector.tracker import IDMerger, ObjectFSM, apply_cross_class_nms
 from detector.yolo_detector import YOLODetector
 from geometry.crosswalk import CrosswalkZone
 from geometry.polygon_editor import PolygonEditor
@@ -20,6 +21,7 @@ from logic.violation import ViolationDetector
 from schemas import ViolationEvent
 from services.pipeline import EnforcementPipeline
 from vision.draw import draw_box
+from vision.stabilizer import VideoStabilizer
 
 
 WINDOW_NAME = "Crosswalk Violation System"
@@ -48,7 +50,30 @@ def build_event(frame_index, box, obj_id, vehicle_zone, trigger, polygon):
 
 
 def main():
-    cap = cv2.VideoCapture(VIDEO_PATH)
+    parser = argparse.ArgumentParser(description="Crosswalk Violation System")
+    parser.add_argument(
+        "--chatbot", action="store_true",
+        help="Launch interactive chatbot instead of processing video",
+    )
+    parser.add_argument(
+        "--no-stabilize", action="store_true",
+        help="Disable video stabilisation",
+    )
+    parser.add_argument(
+        "--video", metavar="PATH",
+        help="Path to video file (overrides VIDEO_PATH env / config default)",
+    )
+    args = parser.parse_args()
+
+    if args.chatbot:
+        from chatbot import run_chatbot
+        run_chatbot()
+        return
+
+    enable_stabilization = not args.no_stabilize
+    video_source = args.video if args.video else VIDEO_PATH
+
+    cap = cv2.VideoCapture(video_source)
     if not cap.isOpened():
         raise RuntimeError("Cannot open video")
 
@@ -83,8 +108,11 @@ def main():
 
     detector = YOLODetector(MODEL_PATH, DETECTION_CLASSES, CONF_THRESHOLD, IMG_SIZE)
     fsm = ObjectFSM()
+    id_merger = IDMerger(proximity_px=40.0, min_frames=3)
     violation_detector = ViolationDetector(polygon)
     enforcement_pipeline = EnforcementPipeline(settings)
+
+    stabilizer = VideoStabilizer() if enable_stabilization else None
 
     pedestrians_progress = {}
     vehicles_inside = set()
@@ -97,12 +125,27 @@ def main():
                 break
 
             frame_index += 1
+
+            # --- video stabilisation ---
+            if stabilizer is not None:
+                if frame_index == 1:
+                    stabilizer.init_reference(frame)
+                else:
+                    frame = stabilizer.stabilize(frame)
+
             results = detector.detect(frame)
 
             crosswalk.draw(frame)
             crosswalk.draw_half_split(frame, ratio=settings.runtime.split_ratio)
             draw_zone_overlay(frame, upper_poly, (255, 0, 0), alpha=0.15)
             draw_zone_overlay(frame, lower_poly, (0, 255, 0), alpha=0.15)
+
+            # stabilisation status overlay
+            if stabilizer is not None:
+                stab_label = "Stabilised" if stabilizer.is_stable else "Unstable"
+                stab_color = (0, 255, 0) if stabilizer.is_stable else (0, 0, 255)
+                cv2.putText(frame, stab_label, (frame.shape[1] - 160, 28),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, stab_color, 2)
 
             cv2.putText(
                 frame,
@@ -118,6 +161,15 @@ def main():
                 boxes = results[0].boxes.xyxy.cpu().numpy()
                 classes = results[0].boxes.cls.cpu().numpy().astype(int)
                 ids = results[0].boxes.id.cpu().numpy().astype(int)
+                confs = results[0].boxes.conf.cpu().numpy()
+
+                # cross-class NMS: drop duplicate vehicle boxes with IoU > 0.5
+                boxes, classes, ids, confs = apply_cross_class_nms(
+                    boxes, classes, ids, confs, iou_threshold=0.5
+                )
+
+                # centroid-proximity ID merge: unify IDs tracking the same object
+                ids = id_merger.update(ids, boxes)
 
                 for box, cls, obj_id in zip(boxes, classes, ids):
                     obj_class = "person" if cls == 0 else "vehicle"

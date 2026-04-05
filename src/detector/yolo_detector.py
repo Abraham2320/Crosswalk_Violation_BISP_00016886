@@ -1,4 +1,13 @@
+from __future__ import annotations
+
+from pathlib import Path
+
 from ultralytics import YOLO
+
+# Custom config sits at the project root (two levels above this file)
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+_BYTETRACK_CFG = _PROJECT_ROOT / "bytetrack.yaml"
+_TRACKER_ARG = str(_BYTETRACK_CFG) if _BYTETRACK_CFG.exists() else "bytetrack.yaml"
 
 
 class YOLODetector:
@@ -14,5 +23,6 @@ class YOLODetector:
             persist=True,
             conf=self.conf,
             imgsz=self.imgsz,
-            classes=self.classes
+            classes=self.classes,
+            tracker=_TRACKER_ARG,
         )

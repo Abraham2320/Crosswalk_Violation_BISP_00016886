@@ -1,13 +1,29 @@
-ultralytics
-opencv-python
-numpy
-fastapi>=0.115
-uvicorn[standard]>=0.30
-pydantic>=2.7
-sqlalchemy>=2.0
-alembic>=1.13
-psycopg[binary]>=3.1
-reportlab>=4.0
-easyocr>=1.7
-paddleocr>=2.8
-openai>=1.0
+# ── Core CV / detection ─────────────────────────────────────────────────────
+ultralytics>=8.2.0          # YOLOv8 + built-in ByteTrack tracker
+opencv-python>=4.9.0        # frame capture, warp, drawing
+numpy>=1.26.0               # array ops used throughout
+supervision>=0.21.0         # ByteTrack / tracker utilities (optional companion)
+
+# ── License plate OCR ───────────────────────────────────────────────────────
+easyocr>=1.7.1              # primary OCR backend (CPU supported)
+
+# ── Dashboard ───────────────────────────────────────────────────────────────
+streamlit>=1.35.0
+pandas>=2.1.0
+
+# ── AI / LLM ────────────────────────────────────────────────────────────────
+anthropic>=0.28.0           # Claude API (dashboard summary + chatbot)
+
+# ── REST API (optional – only needed when running run_api.py) ────────────────
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+pydantic>=2.7.0
+sqlalchemy>=2.0.0
+alembic>=1.13.0
+psycopg[binary]>=3.1.0      # PostgreSQL driver (SQLite fallback needs nothing)
+
+# ── Reporting / invoices ─────────────────────────────────────────────────────
+reportlab>=4.0.0            # PDF invoice generation (falls back to .txt if absent)
+
+# ── Optional alternative OCR backend ────────────────────────────────────────
+# paddleocr>=2.8.0          # uncomment to enable PaddleOCR instead of EasyOCR
