@@ -25,5 +25,10 @@ psycopg[binary]>=3.1.0      # PostgreSQL driver (SQLite fallback needs nothing)
 # ── Reporting / invoices ─────────────────────────────────────────────────────
 reportlab>=4.0.0            # PDF invoice generation (falls back to .txt if absent)
 
+# ── Web platform (admin panel + violator portal) ────────────────────────────
+Flask>=2.3.0
+Werkzeug>=2.3.0             # password hashing (werkzeug.security)
+Pillow>=10.0.0              # image utilities for snapshot post-processing
+
 # ── Optional alternative OCR backend ────────────────────────────────────────
 # paddleocr>=2.8.0          # uncomment to enable PaddleOCR instead of EasyOCR

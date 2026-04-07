@@ -29,7 +29,7 @@ def load_violations() -> pd.DataFrame:
         return pd.DataFrame(columns=[
             "id", "vehicle_id", "plate_number", "timestamp",
             "confidence", "status", "location", "violation_type",
-            "pedestrian_direction", "frame_image_path",
+            "severity", "pedestrian_direction", "frame_image_path",
         ])
     conn = sqlite3.connect(DB_PATH)
     df = pd.read_sql_query("SELECT * FROM violations ORDER BY timestamp DESC", conn)
@@ -68,6 +68,11 @@ plate_filter = st.sidebar.radio(
     ["All", "Plate captured", "No plate"],
 )
 
+violation_type_filter = st.sidebar.radio(
+    "Violation type",
+    ["All", "FAILED_TO_YIELD", "UNSAFE_REENTRY"],
+)
+
 # Apply filters
 df = raw.copy()
 if not df.empty and "timestamp" in df.columns:
@@ -82,6 +87,8 @@ if not df.empty and "timestamp" in df.columns:
         df = df[df["plate_number"].notna() & (df["plate_number"] != "")]
     elif plate_filter == "No plate":
         df = df[df["plate_number"].isna() | (df["plate_number"] == "")]
+    if violation_type_filter != "All" and "violation_type" in df.columns:
+        df = df[df["violation_type"] == violation_type_filter]
 
 # ---------------------------------------------------------------------------
 # Page title
@@ -109,11 +116,17 @@ if total:
 else:
     plate_rate = "N/A"
 
-col1, col2, col3, col4 = st.columns(4)
+if total and "severity" in df.columns:
+    high_sev = int((df["severity"] == "HIGH").sum())
+else:
+    high_sev = 0
+
+col1, col2, col3, col4, col5 = st.columns(5)
 col1.metric("Total Violations", total)
 col2.metric("Unique Vehicles", unique_vehicles)
 col3.metric("Peak Violation Hour", peak_hour_label)
 col4.metric("Plate Recognition Rate", plate_rate)
+col5.metric("High Severity (FAILED_TO_YIELD)", high_sev)
 
 st.divider()
 
@@ -201,7 +214,7 @@ ROWS_PER_PAGE = 20
 if total:
     display_cols = [
         c for c in ["id", "vehicle_id", "plate_number", "timestamp",
-                     "confidence", "status", "location"]
+                     "violation_type", "severity", "confidence", "status", "location"]
         if c in df.columns
     ]
     display_df = df[display_cols].copy()

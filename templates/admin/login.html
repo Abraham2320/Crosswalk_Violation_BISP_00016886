@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}Admin Login — Crosswalk Enforcement{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
+{% endblock %}
+
+{% block nav %}{% endblock %}
+
+{% block content %}
+<div class="login-page">
+  <div class="login-card">
+    <div class="login-header">
+      <!-- CCTV icon 48px -->
+      <div class="login-icon">
+        <svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="2" y="12" width="28" height="20" rx="3" stroke="currentColor" stroke-width="2.5"/>
+          <path d="M30 20.5L44 14v18l-14-6z" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"/>
+          <circle cx="13" cy="22" r="4" fill="currentColor" opacity="0.6"/>
+          <line x1="12" y1="32" x2="12" y2="40" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+          <line x1="7" y1="40" x2="17" y2="40" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <div class="login-title">Enforcement System</div>
+      <div class="login-subtitle">Admin Access</div>
+    </div>
+
+    {% if error %}
+    <div class="alert alert-error">{{ error }}</div>
+    {% endif %}
+
+    {% if lockout_remaining and lockout_remaining > 0 %}
+    <div class="alert alert-error">
+      Account locked. Try again in
+      {{ '%d:%02d'|format(lockout_remaining // 60, lockout_remaining % 60) }}.
+    </div>
+    {% endif %}
+
+    <form method="POST" action="{{ url_for('admin_login') }}">
+      <div class="form-group">
+        <label class="form-label" for="username">Username</label>
+        <input
+          class="input"
+          type="text"
+          id="username"
+          name="username"
+          autocomplete="username"
+          autofocus
+          required
+        >
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="password">Password</label>
+        <input
+          class="input"
+          type="password"
+          id="password"
+          name="password"
+          autocomplete="current-password"
+          required
+        >
+      </div>
+      <button
+        type="submit"
+        class="btn-primary"
+        style="width:100%; justify-content:center; margin-top:8px;"
+        {% if lockout_remaining and lockout_remaining > 0 %}disabled{% endif %}
+      >
+        Authenticate
+      </button>
+    </form>
+  </div>
+</div>
+{% endblock %}

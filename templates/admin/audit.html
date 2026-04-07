@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Audit Log — Crosswalk Enforcement{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="page-container">
+
+  <div class="page-header">
+    <div class="page-title">Audit Log</div>
+    <div class="page-subtitle">Last 100 admin actions</div>
+  </div>
+
+  <div class="card" style="padding:0; overflow:hidden;">
+    <div class="table-scroll">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Timestamp</th>
+            <th>User</th>
+            <th>Action</th>
+            <th>Target</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for e in entries %}
+          <tr>
+            <td class="mono" style="font-size:11px; color:var(--text-muted);">{{ e.id }}</td>
+            <td class="mono" style="font-size:12px; white-space:nowrap;">
+              {{ e.timestamp[:19].replace('T',' ') if e.timestamp else '—' }}
+            </td>
+            <td style="font-family:var(--font-mono); font-size:13px; color:var(--accent-amber);">
+              {{ e.admin_username or '—' }}
+            </td>
+            <td><span class="audit-action">{{ e.action }}</span></td>
+            <td class="mono" style="font-size:12px; color:var(--text-secondary);">
+              {{ e.target or '—' }}
+            </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="5" style="text-align:center; color:var(--text-muted); padding:48px;">
+              No audit entries yet.
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

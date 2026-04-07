@@ -1,0 +1,610 @@
+{% extends "base.html" %}
+{% block title %}Invoice — {{ violation.id[:8] }}{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
+<style>
+/* ── Invoice chrome (screen) ──────────────────────────────────────── */
+.invoice-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+/* ── Invoice document ─────────────────────────────────────────────── */
+.invoice-doc {
+  max-width: 860px;
+  margin: 0 auto;
+  background: #0D1018;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  font-family: var(--font-display);
+}
+
+/* Header band */
+.inv-header {
+  background: linear-gradient(135deg, #0F1117 0%, #161B27 100%);
+  border-bottom: 3px solid var(--accent-red);
+  padding: 28px 36px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+.inv-org {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.inv-org-name {
+  font-weight: 700;
+  font-size: 18px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent-amber);
+}
+.inv-org-sub {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  letter-spacing: 0.06em;
+}
+.inv-doc-info { text-align: right; }
+.inv-doc-type {
+  font-weight: 700;
+  font-size: 22px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent-red);
+}
+.inv-doc-ref {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+}
+.inv-doc-date {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+/* Status banner */
+.inv-status-bar {
+  background: rgba(239,68,68,0.08);
+  border-bottom: 1px solid rgba(239,68,68,0.2);
+  padding: 10px 36px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--accent-red);
+  letter-spacing: 0.06em;
+}
+
+/* Body */
+.inv-body { padding: 32px 36px; }
+
+/* Two-column top section */
+.inv-top {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  margin-bottom: 28px;
+}
+
+/* Plate widget */
+.inv-plate-widget { display: flex; flex-direction: column; gap: 12px; }
+.inv-section-title {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent-amber);
+  margin-bottom: 8px;
+}
+
+/* Uzbek plate style */
+.uzbek-plate {
+  background: #FFD700;
+  border: 3px solid #333;
+  border-radius: 6px;
+  padding: 8px 16px;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 220px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+}
+.plate-country {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  color: #1a1a3e;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  margin-bottom: 2px;
+}
+.plate-number {
+  font-family: var(--font-mono);
+  font-size: 28px;
+  font-weight: 700;
+  color: #0a0a0a;
+  letter-spacing: 0.15em;
+  line-height: 1;
+}
+.plate-undetected {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  color: rgba(239,68,68,0.7);
+  letter-spacing: 0.1em;
+  padding: 12px 20px;
+  border: 2px dashed rgba(239,68,68,0.3);
+  border-radius: 4px;
+  text-align: center;
+}
+
+/* Details table */
+.inv-details { display: flex; flex-direction: column; gap: 0; }
+.inv-row {
+  display: grid;
+  grid-template-columns: 130px 1fr;
+  gap: 8px;
+  padding: 9px 0;
+  border-bottom: 1px solid rgba(31,41,55,0.4);
+}
+.inv-row:last-child { border-bottom: none; }
+.inv-key {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding-top: 2px;
+}
+.inv-val {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+/* Snapshot section */
+.inv-evidence {
+  margin-bottom: 28px;
+}
+.inv-snapshot-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent-amber);
+  margin-bottom: 8px;
+}
+.inv-snapshot-img {
+  width: 100%;
+  border: 1px solid rgba(245,158,11,0.3);
+  border-radius: var(--radius);
+  display: block;
+  max-height: 280px;
+  object-fit: cover;
+}
+.inv-snapshot-none {
+  background: var(--bg-elevated);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  height: 160px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-family: var(--font-mono);
+}
+
+/* Map section */
+.inv-map-section { margin-bottom: 28px; }
+#invoice-map {
+  width: 100%;
+  height: 240px;
+  border-radius: var(--radius);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+}
+.inv-map-placeholder {
+  width: 100%;
+  height: 240px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-family: var(--font-mono);
+}
+
+/* Fine section */
+.inv-fine {
+  background: rgba(239,68,68,0.06);
+  border: 1px solid rgba(239,68,68,0.2);
+  border-radius: var(--radius-lg);
+  padding: 20px 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+.inv-fine-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+.inv-fine-amount {
+  font-family: var(--font-mono);
+  font-size: 32px;
+  font-weight: 500;
+  color: var(--accent-red);
+}
+.inv-fine-currency {
+  font-size: 14px;
+  color: var(--text-muted);
+  margin-left: 8px;
+}
+.inv-fine-deadline {
+  text-align: right;
+}
+.inv-fine-deadline-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.inv-fine-deadline-date {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  color: var(--accent-amber);
+  margin-top: 2px;
+}
+
+/* Payment instructions */
+.inv-payment {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 20px;
+  margin-bottom: 20px;
+}
+.inv-payment-title {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent-amber);
+  margin-bottom: 10px;
+}
+.inv-payment ul {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.inv-payment li {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-secondary);
+  padding-left: 14px;
+  position: relative;
+}
+.inv-payment li::before {
+  content: "›";
+  position: absolute;
+  left: 0;
+  color: var(--accent-amber);
+}
+
+/* Footer band */
+.inv-footer {
+  background: var(--bg-elevated);
+  border-top: 1px solid var(--border);
+  padding: 16px 36px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.inv-footer-ref { letter-spacing: 0.06em; }
+.inv-footer-stamp {
+  font-weight: 500;
+  color: var(--accent-amber);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* ── Print styles ─────────────────────────────────────────────────── */
+@media print {
+  .nav-bar, .invoice-actions, .site-footer { display: none !important; }
+  .main-content { padding-top: 0 !important; }
+  body { background: #fff !important; color: #000 !important; }
+  .invoice-doc {
+    background: #fff !important;
+    border: none !important;
+    border-radius: 0 !important;
+    max-width: 100% !important;
+  }
+  .inv-header { background: #f5f5f5 !important; color: #000 !important; border-bottom: 3px solid #cc0000 !important; }
+  .inv-org-name { color: #c47a00 !important; }
+  .inv-doc-type { color: #cc0000 !important; }
+  .inv-body, .inv-val { color: #000 !important; }
+  .inv-key { color: #555 !important; }
+  .inv-fine { background: #fff0f0 !important; border-color: #ffcccc !important; }
+  .inv-fine-amount { color: #cc0000 !important; }
+  .inv-payment { background: #f9f9f9 !important; }
+  .uzbek-plate { box-shadow: 0 2px 6px rgba(0,0,0,0.3) !important; }
+  .inv-status-bar { background: #fff5f5 !important; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-container">
+
+  <!-- Action buttons -->
+  <div class="invoice-actions">
+    <a href="{{ url_for('admin_violation_detail', violation_id=violation.id) }}"
+       class="btn-ghost btn-sm">&larr; Back</a>
+    <button class="btn-primary btn-sm" onclick="window.print()">
+      &#128438; Print / Save PDF
+    </button>
+    <a href="{{ url_for('admin_violations') }}" class="btn-ghost btn-sm">All Violations</a>
+  </div>
+
+  <!-- Invoice document -->
+  <div class="invoice-doc">
+
+    <!-- Header -->
+    <div class="inv-header">
+      <div class="inv-org">
+        <div class="inv-org-name">WIUT Traffic Enforcement System</div>
+        <div class="inv-org-sub">Westminster International University in Tashkent</div>
+        <div class="inv-org-sub">Istiqbol St 12, Tashkent 100047, Uzbekistan</div>
+      </div>
+      <div class="inv-doc-info">
+        <div class="inv-doc-type">Violation Notice</div>
+        <div class="inv-doc-ref">REF: {{ violation.id[:8].upper() }}-{{ violation.timestamp[:10].replace('-','') if violation.timestamp else 'N/A' }}</div>
+        <div class="inv-doc-date">
+          Issued: {{ violation.timestamp[:10] if violation.timestamp else '—' }}
+        </div>
+      </div>
+    </div>
+
+    <!-- Status bar -->
+    <div class="inv-status-bar">
+      <span>&#9888;</span>
+      <span>
+        {% if violation.severity == 'HIGH' %}HIGH SEVERITY{% else %}LOW SEVERITY{% endif %}
+        CROSSWALK VIOLATION RECORDED
+      </span>
+    </div>
+
+    <!-- Body -->
+    <div class="inv-body">
+
+      <!-- Top two columns: plate + details -->
+      <div class="inv-top">
+
+        <!-- Plate -->
+        <div class="inv-plate-widget">
+          <div class="inv-section-title">Vehicle Plate</div>
+          {% if violation.plate_number %}
+            <div class="uzbek-plate">
+              <div class="plate-country">🇺🇿 UZ</div>
+              <div class="plate-number">{{ violation.plate_number }}</div>
+            </div>
+          {% else %}
+            <div class="plate-undetected">UNDETECTED</div>
+          {% endif %}
+          <div style="margin-top:16px;">
+            <div class="inv-section-title">Violation</div>
+            {% if violation.severity == 'HIGH' %}
+              <span class="badge badge-high pulse-amber" style="margin-right:8px;">HIGH</span>
+            {% else %}
+              <span class="badge badge-low" style="margin-right:8px;">LOW</span>
+            {% endif %}
+            <span style="font-size:13px; color:var(--text-secondary);">
+              {{ (violation.violation_type or '').replace('_',' ') }}
+            </span>
+          </div>
+        </div>
+
+        <!-- Details -->
+        <div>
+          <div class="inv-section-title">Violation Details</div>
+          <div class="inv-details">
+            <div class="inv-row">
+              <span class="inv-key">Date &amp; Time</span>
+              <span class="inv-val">
+                {{ violation.timestamp[:19].replace('T',' ') if violation.timestamp else '—' }}
+              </span>
+            </div>
+            <div class="inv-row">
+              <span class="inv-key">Vehicle ID</span>
+              <span class="inv-val">VEH-{{ violation.vehicle_id }}</span>
+            </div>
+            <div class="inv-row">
+              <span class="inv-key">Location</span>
+              <span class="inv-val">{{ violation.display_location or '—' }}</span>
+            </div>
+            {% if violation.location_address %}
+            <div class="inv-row">
+              <span class="inv-key">Address</span>
+              <span class="inv-val">{{ violation.location_address }}</span>
+            </div>
+            {% endif %}
+            <div class="inv-row">
+              <span class="inv-key">Type</span>
+              <span class="inv-val">{{ (violation.violation_type or '').replace('_',' ') }}</span>
+            </div>
+            <div class="inv-row">
+              <span class="inv-key">Confidence</span>
+              <span class="inv-val">
+                {% set cp = (violation.confidence * 100)|round|int if violation.confidence else 0 %}
+                {% if cp >= 80 %}
+                  <span style="color:var(--accent-green);">{{ cp }}%</span>
+                {% else %}
+                  <span style="color:var(--accent-amber);">{{ cp }}%</span>
+                {% endif %}
+              </span>
+            </div>
+            {% if violation.vehicle_speed_estimate %}
+            <div class="inv-row">
+              <span class="inv-key">Speed Est.</span>
+              <span class="inv-val">{{ violation.vehicle_speed_estimate|round(1) }} px/frame</span>
+            </div>
+            {% endif %}
+            <div class="inv-row">
+              <span class="inv-key">Status</span>
+              <span class="inv-val">
+                {% if violation.status == 'processed' %}
+                  <span class="badge badge-ok">Processed</span>
+                {% else %}
+                  <span class="badge" style="border-color:var(--border); color:var(--text-secondary);">{{ violation.status or '—' }}</span>
+                {% endif %}
+              </span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Snapshot / evidence -->
+      <div class="inv-evidence">
+        <div class="inv-section-title">Evidence — Moment of Violation</div>
+        {% if violation.snapshot_path %}
+          <img class="inv-snapshot-img"
+               src="{{ url_for('static', filename=violation.snapshot_path) }}"
+               alt="Violation snapshot"
+               onerror="this.outerHTML='<div class=inv-snapshot-none>Snapshot file not found</div>'">
+        {% else %}
+          <div class="inv-snapshot-none">No snapshot captured for this record</div>
+        {% endif %}
+      </div>
+
+      <!-- Location map -->
+      <div class="inv-map-section">
+        <div class="inv-section-title">
+          Location
+          {% if violation.latitude %}
+            &mdash; {{ violation.latitude|round(5) }}, {{ violation.longitude|round(5) }}
+          {% endif %}
+        </div>
+
+        {% if violation.latitude and yandex_maps_key %}
+          <div id="invoice-map"></div>
+          <script src="https://api-maps.yandex.ru/2.1/?apikey={{ yandex_maps_key }}&lang=en_US" type="text/javascript"></script>
+          <script>
+            ymaps.ready(function () {
+              var lat = {{ violation.latitude }};
+              var lng = {{ violation.longitude }};
+              var myMap = new ymaps.Map("invoice-map", {
+                center: [lat, lng],
+                zoom: 17,
+                type: "yandex#satellite",
+                controls: ["zoomControl", "typeSelector"]
+              });
+              myMap.geoObjects.add(new ymaps.Placemark(
+                [lat, lng],
+                {
+                  balloonContent: "<strong>{{ violation.display_location | e }}</strong><br>"
+                                + "{{ (violation.timestamp or '')[:19].replace('T',' ') }}<br>"
+                                + "{{ (violation.violation_type or '').replace('_',' ') }}"
+                },
+                { preset: "islands#redCircleDotIcon" }
+              ));
+            });
+          </script>
+        {% elif violation.latitude %}
+          <!-- Yandex Maps fallback: static map link -->
+          <div class="inv-map-placeholder">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
+              <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"
+                    stroke="currentColor" stroke-width="1.5"/>
+              <circle cx="12" cy="9" r="2.5" stroke="currentColor" stroke-width="1.5"/>
+            </svg>
+            <span>{{ violation.display_location or 'Location recorded' }}</span>
+            <span>{{ violation.latitude|round(5) }}, {{ violation.longitude|round(5) }}</span>
+            <a href="https://yandex.com/maps/?ll={{ violation.longitude }},{{ violation.latitude }}&z=17&pt={{ violation.longitude }},{{ violation.latitude }},pm2rdm"
+               target="_blank" class="btn-ghost btn-sm" style="margin-top:8px;">
+              Open in Yandex Maps
+            </a>
+            <span style="font-size:10px; margin-top:4px;">
+              Set YANDEX_MAPS_API_KEY in .env to embed the map here.
+            </span>
+          </div>
+        {% else %}
+          <div class="inv-map-placeholder">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
+              <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"
+                    stroke="currentColor" stroke-width="1.5"/>
+              <circle cx="12" cy="9" r="2.5" stroke="currentColor" stroke-width="1.5"/>
+            </svg>
+            <span>{{ violation.display_location or 'Location not recorded' }}</span>
+            <span style="font-size:10px;">Set LOCATION_LATITUDE / LOCATION_LONGITUDE env vars to enable map.</span>
+          </div>
+        {% endif %}
+      </div>
+
+      <!-- Fine amount -->
+      <div class="inv-fine">
+        <div>
+          <div class="inv-fine-label">Fine Amount</div>
+          <div>
+            <span class="inv-fine-amount">150,000</span>
+            <span class="inv-fine-currency">UZS</span>
+          </div>
+        </div>
+        <div class="inv-fine-deadline">
+          <div class="inv-fine-deadline-label">Payment Deadline</div>
+          <div class="inv-fine-deadline-date">{{ deadline }}</div>
+        </div>
+      </div>
+
+      <!-- Payment instructions -->
+      <div class="inv-payment">
+        <div class="inv-payment-title">Payment Instructions</div>
+        <ul>
+          <li>Pay online via the Unified Interbank Processing Centre (UZCARD / HUMO).</li>
+          <li>Visit any branch of Xalq Bank, Asaka Bank, or Ipoteka Bank with this notice.</li>
+          <li>Quote reference number: <strong style="color:var(--accent-amber);">{{ violation.id[:8].upper() }}</strong> when making payment.</li>
+          <li>Failure to pay within 30 days may result in an additional penalty of 50,000 UZS.</li>
+          <li>For disputes contact: enforcement@wiut.uz or +998 71 238 74 00.</li>
+        </ul>
+      </div>
+
+    </div><!-- /inv-body -->
+
+    <!-- Footer -->
+    <div class="inv-footer">
+      <div class="inv-footer-ref">
+        REF {{ violation.id[:8].upper() }} &nbsp;·&nbsp; {{ violation.timestamp[:10] if violation.timestamp else '' }}
+      </div>
+      <div class="inv-footer-stamp">
+        WIUT Traffic Enforcement &middot; {{ current_year }}
+      </div>
+    </div>
+
+  </div><!-- /invoice-doc -->
+</div>
+{% endblock %}

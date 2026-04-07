@@ -15,6 +15,19 @@ class LicensePlateDetector:
     def __init__(self, settings: AppSettings):
         self.settings = settings
         self._detector: Optional[YOLODetector] = None
+
+        # ── Custom plate-detection model ──────────────────────────────────────
+        # To plug in your own trained YOLO model, set this env var in .env:
+        #
+        #   PLATE_MODEL_PATH=models/my_plate_detector.pt
+        #
+        # The model must be a Ultralytics YOLO model (.pt file) where class 0
+        # is the license plate bounding box.  You can change the expected class
+        # index via PLATE_CLASSES (comma-separated int list, e.g. "0").
+        #
+        # If the file doesn't exist the system falls back automatically to the
+        # OpenCV Haar cascade below, so you can test without the custom model.
+        # ─────────────────────────────────────────────────────────────────────
         model_path = settings.models.license_plate_model_path
         if model_path and Path(model_path).exists():
             self._detector = YOLODetector(
@@ -23,6 +36,8 @@ class LicensePlateDetector:
                 conf=settings.models.plate_confidence,
                 imgsz=settings.models.image_size,
             )
+
+        # Haar-cascade fallback (no GPU required, lower accuracy)
         self._cascade = cv2.CascadeClassifier(
             cv2.data.haarcascades + "haarcascade_russian_plate_number.xml"
         )

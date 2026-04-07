@@ -47,6 +47,9 @@ class ViolationEvent:
     confidence: float
     location: str
     violation_type: str = "crosswalk_violation"
+    severity: str = "HIGH"
+    snapshot_path: Optional[str] = None
+    vehicle_speed_estimate: Optional[float] = None
 
     @classmethod
     def create(
@@ -60,6 +63,10 @@ class ViolationEvent:
         pedestrian_zone: Optional[str],
         confidence: float,
         location: str,
+        violation_type: str = "crosswalk_violation",
+        severity: str = "HIGH",
+        snapshot_path: Optional[str] = None,
+        vehicle_speed_estimate: Optional[float] = None,
     ) -> "ViolationEvent":
         return cls(
             violation_id=str(uuid4()),
@@ -73,6 +80,10 @@ class ViolationEvent:
             pedestrian_zone=pedestrian_zone,
             confidence=confidence,
             location=location,
+            violation_type=violation_type,
+            severity=severity,
+            snapshot_path=snapshot_path,
+            vehicle_speed_estimate=vehicle_speed_estimate,
         )
 
     def to_metadata(self) -> Dict[str, Any]:

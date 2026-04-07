@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Not Found — Crosswalk Enforcement{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
+{% endblock %}
+{% block content %}
+<div class="page-container" style="text-align:center; padding-top:80px;">
+  <div style="font-family:var(--font-mono); font-size:64px; color:var(--accent-amber); opacity:0.3;">404</div>
+  <div class="page-title" style="margin-top:8px;">Record Not Found</div>
+  <p class="text-muted" style="margin-top:12px; font-size:14px;">
+    The requested record does not exist in the database.
+  </p>
+  <a href="{{ url_for('admin_violations') }}" class="btn-ghost" style="margin-top:24px; display:inline-flex;">
+    &larr; Back to Violations
+  </a>
+</div>
+{% endblock %}

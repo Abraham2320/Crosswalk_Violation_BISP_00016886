@@ -1,0 +1,226 @@
+{% extends "base.html" %}
+{% block title %}Violation {{ violation.id[:8] }} — Crosswalk Enforcement{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="page-container">
+
+  <div class="page-header" style="display:flex; align-items:center; gap:16px;">
+    <a href="{{ url_for('admin_violations') }}" class="btn-ghost btn-sm">&larr; Back</a>
+    <div>
+      <div class="page-title">
+        {{ (violation.violation_type or 'VIOLATION').replace('_',' ') }}
+      </div>
+      <div class="page-subtitle font-mono">
+        ID: {{ violation.id }}
+      </div>
+    </div>
+  </div>
+
+  <div class="detail-layout">
+
+    <!-- ── Left: Snapshot ───────────────────────────────── -->
+    <div class="snapshot-container">
+      <div class="snapshot-label">Violation Frame</div>
+
+      {% if violation.snapshot_path %}
+        <img
+          src="{{ url_for('static', filename=violation.snapshot_path) }}"
+          alt="Violation snapshot"
+          class="snapshot-img"
+          onerror="this.closest('.snapshot-container').innerHTML = document.getElementById('snap-placeholder').innerHTML;"
+        >
+      {% else %}
+        <div class="snapshot-placeholder">
+          <!-- Camera-slash icon -->
+          <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+            <rect x="6" y="14" width="36" height="24" rx="3" stroke="currentColor" stroke-width="2"/>
+            <circle cx="24" cy="26" r="7" stroke="currentColor" stroke-width="2"/>
+            <path d="M6 6l36 36" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+          <span style="font-family:var(--font-display); font-size:13px; letter-spacing:0.06em; text-transform:uppercase;">
+            Snapshot Unavailable
+          </span>
+        </div>
+      {% endif %}
+
+      <!-- Filmstrip decoration -->
+      <div class="filmstrip">
+        {% for _ in range(20) %}
+        <div class="filmstrip-hole"></div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- ── Right: Details ───────────────────────────────── -->
+    <div class="card" style="padding:28px;">
+      <!-- Violation type header -->
+      <div style="margin-bottom:20px;">
+        <div style="font-family:var(--font-display); font-weight:700; font-size:22px; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:10px;">
+          {{ (violation.violation_type or '').replace('_',' ') }}
+        </div>
+        {% if violation.severity == 'HIGH' %}
+          <span class="badge badge-high pulse-amber">High Severity</span>
+        {% else %}
+          <span class="badge badge-low">Low Severity</span>
+        {% endif %}
+      </div>
+
+      <hr class="divider">
+
+      <div class="detail-list">
+
+        <div class="detail-row">
+          <span class="detail-key">Violation ID</span>
+          <span class="detail-value" style="font-size:11px; word-break:break-all;">
+            #{{ violation.id }}
+          </span>
+        </div>
+
+        <div class="detail-row">
+          <span class="detail-key">Timestamp</span>
+          <span class="detail-value">
+            {% if violation.timestamp %}
+              {{ violation.timestamp[:19].replace('T',' ') }}
+            {% else %}—{% endif %}
+          </span>
+        </div>
+
+        <div class="detail-row">
+          <span class="detail-key">Plate Number</span>
+          <span class="detail-value {% if not violation.plate_number %}muted{% endif %}">
+            {% if violation.plate_number %}
+              {{ violation.plate_number }}
+            {% else %}
+              <span style="color:rgba(239,68,68,0.6);">UNDETECTED</span>
+            {% endif %}
+          </span>
+        </div>
+
+        <div class="detail-row">
+          <span class="detail-key">Vehicle ID</span>
+          <span class="detail-value">VEH-{{ violation.vehicle_id }}</span>
+        </div>
+
+        <div class="detail-row">
+          <span class="detail-key">Location</span>
+          <span class="detail-value">
+            {{ violation.display_location or '—' }}
+          </span>
+        </div>
+
+        <div class="detail-row">
+          <span class="detail-key">Confidence</span>
+          <span class="detail-value">
+            {% set conf_pct = (violation.confidence * 100) | round | int if violation.confidence else 0 %}
+            {% if conf_pct >= 80 %}{% set cc = 'var(--accent-green)' %}
+            {% elif conf_pct >= 50 %}{% set cc = 'var(--accent-amber)' %}
+            {% else %}{% set cc = 'var(--accent-red)' %}{% endif %}
+            <span style="color:{{ cc }};">{{ conf_pct }}%</span>
+          </span>
+        </div>
+
+        <div class="detail-row">
+          <span class="detail-key">Speed Est.</span>
+          <span class="detail-value">
+            {% if violation.vehicle_speed_estimate %}
+              {{ violation.vehicle_speed_estimate | round(2) }} px/frame
+            {% else %}
+              <span class="muted">—</span>
+            {% endif %}
+          </span>
+        </div>
+
+        <div class="detail-row">
+          <span class="detail-key">Type</span>
+          <span class="detail-value">
+            {{ (violation.violation_type or '').replace('_',' ') }}
+          </span>
+        </div>
+
+        <div class="detail-row">
+          <span class="detail-key">Status</span>
+          <span class="detail-value">
+            {% if violation.status == 'processed' %}
+              <span class="badge badge-ok">{{ violation.status }}</span>
+            {% else %}
+              <span class="badge" style="border-color:var(--border); color:var(--text-secondary);">
+                {{ violation.status or '—' }}
+              </span>
+            {% endif %}
+          </span>
+        </div>
+
+      </div>
+
+      <hr class="divider">
+
+      <!-- Action buttons -->
+      <div style="display:flex; gap:10px; flex-wrap:wrap;">
+        <a href="{{ url_for('admin_violations') }}" class="btn-ghost btn-sm">
+          &larr; All Violations
+        </a>
+        {% if violation.plate_number %}
+        <a href="{{ url_for('admin_vehicle_detail', identifier=violation.plate_number) }}"
+           class="btn-primary btn-sm">
+          Vehicle History
+        </a>
+        {% else %}
+        <a href="{{ url_for('admin_vehicle_detail', identifier=violation.vehicle_id|string) }}"
+           class="btn-primary btn-sm">
+          Vehicle History
+        </a>
+        {% endif %}
+        <a href="{{ url_for('admin_invoice', violation_id=violation.id) }}"
+           class="btn-ghost btn-sm"
+           style="border-color:var(--accent-amber); color:var(--accent-amber);">
+          &#128438; Generate Invoice
+        </a>
+      </div>
+
+      {% if violation.latitude %}
+      <hr class="divider">
+      <!-- Location map -->
+      <div>
+        <div style="font-family:var(--font-display); font-size:10px; font-weight:600;
+                    letter-spacing:0.1em; text-transform:uppercase;
+                    color:var(--accent-amber); margin-bottom:8px;">
+          Location Map
+        </div>
+        <div id="detail-map"
+             style="width:100%; height:220px; border-radius:var(--radius);
+                    border:1px solid var(--border); background:var(--bg-elevated);">
+        </div>
+        {% if yandex_maps_key %}
+        <script src="https://api-maps.yandex.ru/2.1/?apikey={{ yandex_maps_key }}&lang=en_US"></script>
+        <script>
+          ymaps.ready(function(){
+            var m = new ymaps.Map("detail-map",{
+              center:[{{ violation.latitude }},{{ violation.longitude }}],
+              zoom:17, type:"yandex#satellite"
+            });
+            m.geoObjects.add(new ymaps.Placemark(
+              [{{ violation.latitude }},{{ violation.longitude }}],
+              { balloonContent:"{{ violation.display_location|e }}" },
+              { preset:"islands#redCircleDotIcon" }
+            ));
+          });
+        </script>
+        {% else %}
+        <div style="font-family:var(--font-mono); font-size:11px; color:var(--text-muted); margin-top:6px;">
+          Set <code style="color:var(--accent-amber);">YANDEX_MAPS_API_KEY</code> in .env to embed the map.
+          <a href="https://yandex.com/maps/?ll={{ violation.longitude }},{{ violation.latitude }}&z=17&pt={{ violation.longitude }},{{ violation.latitude }},pm2rdm"
+             target="_blank" rel="noopener noreferrer" style="margin-left:8px;">Open in Yandex Maps ↗</a>
+        </div>
+        {% endif %}
+      </div>
+      {% endif %}
+
+    </div>
+  </div>
+
+</div>
+{% endblock %}

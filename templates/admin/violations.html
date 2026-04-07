@@ -1,0 +1,189 @@
+{% extends "base.html" %}
+{% block title %}Violations — Crosswalk Enforcement{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="page-container">
+
+  <div class="page-header">
+    <div class="page-title">Violation Log</div>
+    <div class="page-subtitle">
+      {{ total_count }} record{{ 's' if total_count != 1 else '' }} found
+      &nbsp;&mdash;&nbsp;
+      page {{ current_page }} of {{ total_pages }}
+    </div>
+  </div>
+
+  <!-- Filter bar -->
+  <form method="GET" action="{{ url_for('admin_violations') }}">
+    <div class="filter-bar">
+
+      <div class="filter-group">
+        <span class="filter-label">Plate</span>
+        <input class="input" type="text" name="plate"
+               value="{{ filters.plate }}" placeholder="Search plate…"
+               style="min-width:120px;">
+      </div>
+
+      <div class="filter-group">
+        <span class="filter-label">Severity</span>
+        <select class="input" name="severity">
+          <option value="">All</option>
+          <option value="HIGH"  {% if filters.severity == 'HIGH'  %}selected{% endif %}>HIGH</option>
+          <option value="LOW"   {% if filters.severity == 'LOW'   %}selected{% endif %}>LOW</option>
+        </select>
+      </div>
+
+      <div class="filter-group">
+        <span class="filter-label">Type</span>
+        <select class="input" name="violation_type">
+          <option value="">All</option>
+          <option value="FAILED_TO_YIELD"  {% if filters.violation_type == 'FAILED_TO_YIELD'  %}selected{% endif %}>Failed to Yield</option>
+          <option value="UNSAFE_REENTRY"  {% if filters.violation_type == 'UNSAFE_REENTRY'  %}selected{% endif %}>Unsafe Re-entry</option>
+        </select>
+      </div>
+
+      <div class="filter-group">
+        <span class="filter-label">Date From</span>
+        <input class="input" type="date" name="date_from"
+               value="{{ filters.date_from }}" style="min-width:130px;">
+      </div>
+
+      <div class="filter-group">
+        <span class="filter-label">Date To</span>
+        <input class="input" type="date" name="date_to"
+               value="{{ filters.date_to }}" style="min-width:130px;">
+      </div>
+
+      <div style="display:flex; gap:8px; align-items:flex-end;">
+        <button type="submit" class="btn-primary btn-sm">Filter</button>
+        <a href="{{ url_for('admin_violations') }}" class="btn-ghost btn-sm">Clear</a>
+        <a href="{{ url_for('admin_export_csv',
+                   severity=filters.severity,
+                   violation_type=filters.violation_type,
+                   date_from=filters.date_from,
+                   date_to=filters.date_to) }}"
+           class="btn-ghost btn-sm">
+          Export CSV
+        </a>
+      </div>
+
+    </div>
+  </form>
+
+  <!-- Violations table -->
+  <div class="card" style="padding:0; overflow:hidden;">
+    <div class="table-scroll">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Timestamp</th>
+            <th>Plate</th>
+            <th>Vehicle</th>
+            <th>Type</th>
+            <th>Severity</th>
+            <th>Location</th>
+            <th>Confidence</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for v in violations %}
+          <tr>
+            <td class="mono" style="font-size:11px; color:var(--text-muted);">
+              {{ v.id[:8] }}…
+            </td>
+            <td class="mono" style="white-space:nowrap; font-size:12px;">
+              {{ v.timestamp[:19].replace('T',' ') if v.timestamp else '—' }}
+            </td>
+            <td class="amber">{{ v.plate_number or '—' }}</td>
+            <td class="mono" style="font-size:12px; color:var(--text-secondary);">
+              VEH-{{ v.vehicle_id }}
+            </td>
+            <td style="font-size:13px;">
+              {% if v.violation_type == 'FAILED_TO_YIELD' %}
+                <span style="color:var(--accent-red);">Failed to Yield</span>
+              {% elif v.violation_type == 'UNSAFE_REENTRY' %}
+                <span style="color:var(--accent-amber);">Unsafe Re-entry</span>
+              {% else %}
+                {{ v.violation_type or '—' }}
+              {% endif %}
+            </td>
+            <td>
+              {% if v.severity == 'HIGH' %}
+                <span class="badge badge-high pulse-amber">HIGH</span>
+              {% else %}
+                <span class="badge badge-low">LOW</span>
+              {% endif %}
+            </td>
+            <td style="font-size:12px; color:var(--text-secondary); max-width:160px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+              {{ v.display_location or '—' }}
+            </td>
+            <td>
+              {# Confidence bar trick #}
+              {% set conf_pct = (v.confidence * 100) | round | int %}
+              {% if conf_pct >= 80 %}{% set conf_color = 'var(--accent-green)' %}
+              {% elif conf_pct >= 50 %}{% set conf_color = 'var(--accent-amber)' %}
+              {% else %}{% set conf_color = 'var(--accent-red)' %}{% endif %}
+              <div class="conf-cell">
+                <div class="conf-bar" style="width:{{ conf_pct }}%; background:{{ conf_color }};"></div>
+                <span class="conf-text" style="color:{{ conf_color }};">{{ conf_pct }}%</span>
+              </div>
+            </td>
+            <td>
+              <a href="{{ url_for('admin_violation_detail', violation_id=v.id) }}"
+                 class="btn-ghost btn-sm">View</a>
+            </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="9" style="text-align:center; color:var(--text-muted); padding:48px;">
+              No violations match the selected filters.
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Pagination -->
+  {% if total_pages > 1 %}
+  <div class="pagination">
+
+    {# Build base query string without page #}
+    {% set base_args = dict(
+         severity=filters.severity,
+         violation_type=filters.violation_type,
+         date_from=filters.date_from,
+         date_to=filters.date_to,
+         plate=filters.plate,
+         per_page=per_page
+       ) %}
+
+    <a href="{{ url_for('admin_violations', page=current_page-1, **base_args) }}"
+       class="page-btn {% if current_page == 1 %}disabled{% endif %}"
+       {% if current_page == 1 %}onclick="return false;"{% endif %}>&lsaquo;</a>
+
+    {% for p in range(1, total_pages + 1) %}
+      {% if p == 1 or p == total_pages or (p >= current_page - 2 and p <= current_page + 2) %}
+        <a href="{{ url_for('admin_violations', page=p, **base_args) }}"
+           class="page-btn {% if p == current_page %}active{% endif %}">{{ p }}</a>
+      {% elif p == current_page - 3 or p == current_page + 3 %}
+        <span style="color:var(--text-muted); padding:0 4px;">…</span>
+      {% endif %}
+    {% endfor %}
+
+    <a href="{{ url_for('admin_violations', page=current_page+1, **base_args) }}"
+       class="page-btn {% if current_page == total_pages %}disabled{% endif %}"
+       {% if current_page == total_pages %}onclick="return false;"{% endif %}>&rsaquo;</a>
+
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}

@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}Check Your Violation — WIUT Enforcement{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/portal.css') }}">
+{% endblock %}
+
+{% block nav %}{% endblock %}
+
+{% block content %}
+<div class="portal-page">
+
+  <!-- Minimal header -->
+  <header class="portal-header">
+    <a href="{{ url_for('portal') }}" class="portal-brand">
+      <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
+        <rect x="1" y="5" width="11" height="8" rx="1.5" stroke="currentColor" stroke-width="1.5"/>
+        <path d="M12 8.5L17 6v7l-5-2.5" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+        <circle cx="5.5" cy="9" r="1.5" fill="currentColor"/>
+      </svg>
+      WIUT Traffic Enforcement
+    </a>
+  </header>
+
+  <!-- Center card -->
+  <div class="portal-center">
+    <div class="portal-card">
+
+      <!-- Warning triangle icon -->
+      <div class="portal-icon">
+        <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+          <path d="M24 4L4 42h40L24 4z" stroke="currentColor" stroke-width="2.5"
+                stroke-linejoin="round" fill="rgba(245,158,11,0.08)"/>
+          <line x1="24" y1="18" x2="24" y2="28" stroke="currentColor"
+                stroke-width="2.5" stroke-linecap="round"/>
+          <circle cx="24" cy="34" r="1.5" fill="currentColor"/>
+        </svg>
+      </div>
+
+      <div class="portal-title">Check Your Violation</div>
+      <div class="portal-subtitle">
+        Enter the license plate number from your vehicle notice
+      </div>
+
+      {% if error %}
+      <div class="alert alert-error" style="text-align:left;">{{ error }}</div>
+      {% endif %}
+
+      <form id="portal-form" method="POST" action="{{ url_for('portal_lookup') }}">
+        <input
+          class="plate-input"
+          type="text"
+          id="plate-input"
+          name="plate_number"
+          placeholder="01A234BC"
+          maxlength="16"
+          autocomplete="off"
+          spellcheck="false"
+          required
+        >
+        <p class="plate-hint">Example: 01A234BC</p>
+
+        <button type="submit" id="search-btn" class="btn-primary btn-search">
+          <span class="btn-text">Search</span>
+          <span class="btn-spinner"></span>
+        </button>
+      </form>
+
+      <div class="privacy-notice">
+        This portal only displays information relevant to the entered plate number.
+        No other vehicle data is accessible.
+      </div>
+
+    </div>
+  </div>
+
+  <footer class="site-footer" style="border-top:1px solid var(--border);">
+    WIUT Traffic Enforcement System &middot; {{ current_year }}
+  </footer>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/portal.js') }}"></script>
+{% endblock %}

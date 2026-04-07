@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from collections import defaultdict, deque
+from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
@@ -164,3 +165,36 @@ class IDMerger:
 
         # Re-apply updated remapping
         return np.array([self._remap.get(int(i), int(i)) for i in ids])
+
+
+# ---------------------------------------------------------------------------
+# Per-track state objects for the spatial FSM violation logic
+# ---------------------------------------------------------------------------
+
+@dataclass
+class PedestrianTrack:
+    """Holds crossing-FSM state for a single pedestrian track."""
+    track_id: int
+    state: str = "OUTSIDE"          # OUTSIDE | ENTERING | CROSSING | CLEARING | EXITED
+    entry_frame: Optional[int] = None
+    midline_crossed_frame: Optional[int] = None
+    exit_frame: Optional[int] = None
+    frames_outside_count: int = 0   # consecutive frames centroid was outside polygon
+    centroid: Optional[Tuple[float, float]] = None
+    prev_centroid: Optional[Tuple[float, float]] = None
+    velocity_history: deque = field(default_factory=lambda: deque(maxlen=10))
+
+
+@dataclass
+class VehicleTrack:
+    """Holds approach/yield state for a single vehicle track."""
+    track_id: int
+    polygon_entry_frame: Optional[int] = None
+    approach_axis: Optional[str] = None          # from_top | from_bottom | from_left | from_right
+    polygon_midline: Optional[float] = None
+    centroid: Optional[Tuple[float, float]] = None
+    prev_centroid: Optional[Tuple[float, float]] = None
+    velocity_history: deque = field(default_factory=lambda: deque(maxlen=20))
+    centroid_history: deque = field(default_factory=lambda: deque(maxlen=30))
+    # snapshot of velocity_history at the moment the car first entered the polygon
+    pre_entry_velocity_snapshot: Optional[List[Tuple[float, float]]] = None

@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+{% block title %}Vehicles — Crosswalk Enforcement{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="page-container">
+
+  {% if vehicle_detail %}
+  <!-- ── Single vehicle detail ─────────────────────────────── -->
+  <div class="page-header" style="display:flex; align-items:center; gap:16px;">
+    <a href="{{ url_for('admin_vehicles') }}" class="btn-ghost btn-sm">&larr; All Vehicles</a>
+    <div>
+      <div class="page-title">Vehicle History</div>
+      <div class="page-subtitle font-mono">{{ identifier }}</div>
+    </div>
+  </div>
+
+  <div class="card" style="padding:0; overflow:hidden;">
+    <div class="table-scroll">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Timestamp</th>
+            <th>Plate</th>
+            <th>Type</th>
+            <th>Severity</th>
+            <th>Location</th>
+            <th>Confidence</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for v in vehicle_detail %}
+          <tr>
+            <td class="mono" style="font-size:12px; white-space:nowrap;">
+              {{ v.timestamp[:19].replace('T',' ') if v.timestamp else '—' }}
+            </td>
+            <td class="amber">{{ v.plate_number or '—' }}</td>
+            <td style="font-size:13px;">
+              {% if v.violation_type == 'FAILED_TO_YIELD' %}
+                <span style="color:var(--accent-red);">Failed to Yield</span>
+              {% else %}
+                <span style="color:var(--accent-amber);">Unsafe Re-entry</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if v.severity == 'HIGH' %}
+                <span class="badge badge-high">HIGH</span>
+              {% else %}
+                <span class="badge badge-low">LOW</span>
+              {% endif %}
+            </td>
+            <td style="font-size:12px; color:var(--text-secondary);">
+              {{ v.display_location or '—' }}
+            </td>
+            <td>
+              {% set cp = (v.confidence * 100)|round|int if v.confidence else 0 %}
+              <span class="font-mono" style="font-size:12px;">{{ cp }}%</span>
+            </td>
+            <td>
+              <a href="{{ url_for('admin_violation_detail', violation_id=v.id) }}"
+                 class="btn-ghost btn-sm">View</a>
+            </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="7" style="text-align:center; color:var(--text-muted); padding:32px;">
+              No violations found.
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {% else %}
+  <!-- ── All vehicles list ──────────────────────────────────── -->
+  <div class="page-header">
+    <div class="page-title">Vehicles</div>
+    <div class="page-subtitle">All unique vehicles sorted by total violations</div>
+  </div>
+
+  <div class="card" style="padding:0; overflow:hidden;">
+    <div class="table-scroll">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Plate</th>
+            <th>Vehicle ID</th>
+            <th>Total</th>
+            <th>First Seen</th>
+            <th>Last Seen</th>
+            <th>High</th>
+            <th>Low</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for v in vehicles %}
+          <tr>
+            <td class="amber">{{ v.plate_number or '—' }}</td>
+            <td class="mono" style="font-size:12px; color:var(--text-secondary);">
+              VEH-{{ v.vehicle_id }}
+            </td>
+            <td class="mono text-amber" style="font-size:16px; font-weight:500;">
+              {{ v.total_violations }}
+            </td>
+            <td class="mono" style="font-size:12px; white-space:nowrap;">
+              {{ v.first_seen[:10] if v.first_seen else '—' }}
+            </td>
+            <td class="mono" style="font-size:12px; white-space:nowrap;">
+              {{ v.last_seen[:10] if v.last_seen else '—' }}
+            </td>
+            <td><span class="badge badge-high">{{ v.high_count }}</span></td>
+            <td><span class="badge badge-low">{{ v.low_count }}</span></td>
+            <td>
+              <a href="{{ url_for('admin_vehicle_detail',
+                         identifier=v.plate_number if v.plate_number else v.vehicle_id|string) }}"
+                 class="btn-ghost btn-sm">Detail</a>
+            </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="8" style="text-align:center; color:var(--text-muted); padding:48px;">
+              No vehicle data yet.
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {% endif %}
+
+</div>
+{% endblock %}

@@ -1,0 +1,481 @@
+{% extends "base.html" %}
+{% block title %}Live Stream — Crosswalk Enforcement{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
+<style>
+  .live-grid {
+    display: grid;
+    grid-template-columns: 1fr 380px;
+    gap: 20px;
+    align-items: start;
+  }
+  @media (max-width: 1100px) { .live-grid { grid-template-columns: 1fr; } }
+
+  .video-wrap {
+    position: relative;
+    background: #000;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    aspect-ratio: 16/9;
+  }
+  .video-wrap img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: block;
+  }
+
+  /* Camera overlay badges */
+  .video-overlay {
+    position: absolute;
+    top: 12px; left: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    pointer-events: none;
+  }
+  .overlay-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    background: rgba(10,10,15,0.8);
+    border: 1px solid var(--border);
+    padding: 3px 8px;
+    border-radius: 2px;
+    backdrop-filter: blur(4px);
+  }
+  .overlay-badge.online  { border-color: rgba(16,185,129,0.5); color: var(--accent-green); }
+  .overlay-badge.offline { border-color: rgba(239,68,68,0.4);  color: var(--accent-red); }
+
+  /* Alert banner */
+  @keyframes alertFlash {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+  .violation-alert {
+    display: none;
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    background: rgba(239,68,68,0.85);
+    padding: 10px 16px;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    text-align: center;
+    animation: alertFlash 1s ease-in-out infinite;
+  }
+  .violation-alert.visible { display: block; }
+
+  /* Camera control card */
+  .camera-control { padding: 20px; }
+  .source-row { display: flex; gap: 8px; }
+  .source-row .input { flex: 1; }
+
+  /* Violation log */
+  .log-wrap {
+    max-height: 360px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+  .log-entry {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 0;
+    border-bottom: 1px solid rgba(31,41,55,0.5);
+  }
+  .log-entry:last-child { border-bottom: none; }
+  .log-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    margin-top: 4px;
+    flex-shrink: 0;
+  }
+  .log-dot.high { background: var(--accent-red); }
+  .log-dot.low  { background: var(--accent-amber); }
+  .log-text { flex: 1; }
+  .log-plate {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--accent-amber);
+  }
+  .log-meta {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+  .log-link {
+    font-size: 11px;
+    color: var(--text-muted);
+    text-decoration: none;
+    margin-left: auto;
+    flex-shrink: 0;
+    align-self: center;
+  }
+  .log-link:hover { color: var(--accent-amber); }
+
+  /* Stats row */
+  .live-stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .mini-stat {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px;
+    text-align: center;
+  }
+  .mini-stat-value {
+    font-family: var(--font-mono);
+    font-size: 20px;
+    color: var(--accent-amber);
+    line-height: 1;
+  }
+  .mini-stat-label {
+    font-family: var(--font-display);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-top: 4px;
+  }
+
+  /* Quick-source buttons */
+  .source-presets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+  }
+  .preset-btn {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    padding: 4px 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all var(--transition);
+  }
+  .preset-btn:hover {
+    border-color: var(--accent-amber);
+    color: var(--accent-amber);
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-container">
+
+  <div class="page-header" style="display:flex; align-items:center; justify-content:space-between;">
+    <div>
+      <div class="page-title">Live Stream</div>
+      <div class="page-subtitle">Real-time crosswalk monitoring</div>
+    </div>
+    <div class="live-indicator" id="sys-indicator">
+      <div class="live-dot"></div>
+      <span id="sys-label">System Active</span>
+    </div>
+  </div>
+
+  <div class="live-grid">
+
+    <!-- ── Left: video feed ──────────────────────────────────── -->
+    <div>
+
+      <!-- Stats row above video -->
+      <div class="live-stats">
+        <div class="mini-stat">
+          <div class="mini-stat-value" id="ls-total">—</div>
+          <div class="mini-stat-label">Total</div>
+        </div>
+        <div class="mini-stat">
+          <div class="mini-stat-value" id="ls-today">—</div>
+          <div class="mini-stat-label">Today</div>
+        </div>
+        <div class="mini-stat">
+          <div class="mini-stat-value" id="ls-fps">
+            {{ camera_status.fps if camera_status.connected else '—' }}
+          </div>
+          <div class="mini-stat-label">FPS</div>
+        </div>
+      </div>
+
+      <!-- Video container -->
+      <div class="video-wrap">
+        <img id="live-img"
+             src="{{ url_for('admin_live_feed') }}"
+             alt="Live camera feed"
+             onerror="this.src='/static/img/no-signal.jpg'">
+
+        <!-- Overlay badges -->
+        <div class="video-overlay">
+          <span class="overlay-badge {% if camera_status.connected %}online{% else %}offline{% endif %}"
+                id="cam-badge">
+            <span id="cam-dot" style="width:6px;height:6px;border-radius:50%;
+              background:{% if camera_status.connected %}var(--accent-green){% else %}var(--accent-red){% endif %};">
+            </span>
+            <span id="cam-status-text">
+              {% if camera_status.connected %}LIVE · {{ camera_status.width }}×{{ camera_status.height }}{% else %}OFFLINE{% endif %}
+            </span>
+          </span>
+          {% if camera_status.source %}
+          <span class="overlay-badge" style="color:var(--text-muted);" id="source-badge">
+            {{ camera_status.source[:36] }}
+          </span>
+          {% endif %}
+        </div>
+
+        <!-- Violation alert banner -->
+        <div class="violation-alert" id="violation-alert">
+          ⚠ ACTIVE VIOLATION DETECTED
+        </div>
+      </div>
+
+      <!-- Camera error message -->
+      <div id="cam-error" style="display:none; margin-top:8px;">
+        <div class="alert alert-error" id="cam-error-text"></div>
+      </div>
+
+      <!-- Camera connect form -->
+      <div class="card camera-control" style="margin-top:16px;">
+        <div class="card-title">Camera Source</div>
+
+        <div class="source-row">
+          <input class="input" type="text" id="cam-source"
+                 value="{{ default_source }}"
+                 placeholder="0  or  rtsp://admin:pass@192.168.1.64:554/stream1">
+          <button class="btn-primary btn-sm" id="btn-connect"
+                  onclick="connectCamera()">Connect</button>
+          <button class="btn-ghost btn-sm" id="btn-disconnect"
+                  onclick="disconnectCamera()"
+                  {% if not camera_status.connected %}style="display:none;"{% endif %}>
+            Disconnect
+          </button>
+        </div>
+
+        <!-- Quick-source presets -->
+        <div class="source-presets">
+          <span style="font-family:var(--font-mono); font-size:10px; color:var(--text-muted);
+                       align-self:center;">Quick:</span>
+          <button class="preset-btn" onclick="setSource('0')">Webcam 0</button>
+          <button class="preset-btn" onclick="setSource('1')">Webcam 1</button>
+          <button class="preset-btn"
+                  onclick="setSource('rtsp://admin:PASSWORD@192.168.1.64:554/Streaming/Channels/101')">
+            Hikvision RTSP
+          </button>
+          <button class="preset-btn"
+                  onclick="setSource('rtsp://admin:PASSWORD@192.168.1.64:554/h264Preview_01_main')">
+            Reolink RTSP
+          </button>
+          <button class="preset-btn" onclick="setSource('Videos/v2.mp4')">
+            Demo Video
+          </button>
+        </div>
+
+        <!-- Connection guide -->
+        <details style="margin-top:14px;">
+          <summary style="font-family:var(--font-display); font-size:12px;
+                          color:var(--text-muted); cursor:pointer; user-select:none;
+                          letter-spacing:0.06em; text-transform:uppercase;">
+            Camera Connection Guide
+          </summary>
+          <div style="margin-top:12px; font-family:var(--font-mono); font-size:11px;
+                      color:var(--text-muted); line-height:2;">
+            <strong style="color:var(--accent-amber);">OFFLINE (USB / built-in webcam)</strong><br>
+            &nbsp;&nbsp;Source: <code style="color:var(--text-primary);">0</code> — first camera<br>
+            &nbsp;&nbsp;Source: <code style="color:var(--text-primary);">1</code>, <code>2</code> … — additional cameras<br>
+            <br>
+            <strong style="color:var(--accent-amber);">ONLINE — Hikvision / Dahua (RTSP)</strong><br>
+            &nbsp;&nbsp;<code style="color:var(--text-primary);">rtsp://admin:PASSWORD@CAMERA_IP:554/Streaming/Channels/101</code><br>
+            <br>
+            <strong style="color:var(--accent-amber);">ONLINE — Reolink / TP-Link Tapo</strong><br>
+            &nbsp;&nbsp;<code style="color:var(--text-primary);">rtsp://admin:PASSWORD@CAMERA_IP:554/h264Preview_01_main</code><br>
+            <br>
+            <strong style="color:var(--accent-amber);">ONLINE — Generic ONVIF</strong><br>
+            &nbsp;&nbsp;<code style="color:var(--text-primary);">rtsp://USER:PASS@CAMERA_IP:554/stream1</code><br>
+            <br>
+            <strong style="color:var(--accent-amber);">ONLINE — HTTP MJPEG</strong><br>
+            &nbsp;&nbsp;<code style="color:var(--text-primary);">http://CAMERA_IP:8080/video</code><br>
+            <br>
+            <span style="color:var(--text-muted);">
+              Tip: Test your RTSP URL with VLC → Media → Open Network Stream first.<br>
+              Set CAMERA_SOURCE in your .env file to persist the setting across restarts.
+            </span>
+          </div>
+        </details>
+      </div>
+
+    </div>
+
+    <!-- ── Right: violation log ───────────────────────────────── -->
+    <div>
+      <div class="card" style="padding:20px;">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;">
+          <div class="card-title" style="margin-bottom:0;">Violation Log</div>
+          <span style="font-family:var(--font-mono); font-size:10px; color:var(--text-muted);">
+            Auto-refresh 3s
+          </span>
+        </div>
+
+        <div class="log-wrap" id="violation-log">
+          <div style="text-align:center; padding:32px; color:var(--text-muted);
+                      font-size:13px; font-family:var(--font-mono);">
+            Loading…
+          </div>
+        </div>
+
+        <div style="margin-top:14px; padding-top:14px; border-top:1px solid var(--border);">
+          <a href="{{ url_for('admin_violations') }}" class="btn-ghost btn-sm" style="width:100%; justify-content:center;">
+            View Full Log
+          </a>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+"use strict";
+
+/* ── Camera controls ──────────────────────────────────────── */
+
+function setSource(val) {
+  document.getElementById("cam-source").value = val;
+}
+
+function setCamBadge(connected, text) {
+  const badge = document.getElementById("cam-badge");
+  const dot   = document.getElementById("cam-dot");
+  const label = document.getElementById("cam-status-text");
+  badge.className = "overlay-badge " + (connected ? "online" : "offline");
+  dot.style.background = connected ? "var(--accent-green)" : "var(--accent-red)";
+  label.textContent = text;
+}
+
+function connectCamera() {
+  const source = document.getElementById("cam-source").value.trim();
+  const btn    = document.getElementById("btn-connect");
+  btn.textContent = "Connecting…";
+  btn.disabled    = true;
+
+  const fd = new FormData();
+  fd.append("source", source);
+
+  fetch("{{ url_for('admin_live_start') }}", { method: "POST", body: fd })
+    .then(r => r.json())
+    .then(d => {
+      btn.textContent = "Connect";
+      btn.disabled    = false;
+      const errEl = document.getElementById("cam-error");
+      if (d.ok) {
+        setCamBadge(true, `LIVE · ${d.width}×${d.height}`);
+        document.getElementById("btn-disconnect").style.display = "";
+        document.getElementById("ls-fps").textContent = d.fps;
+        errEl.style.display = "none";
+        // Reload the img to re-attach to stream
+        const img = document.getElementById("live-img");
+        img.src   = img.src.split("?")[0] + "?t=" + Date.now();
+      } else {
+        setCamBadge(false, "OFFLINE");
+        document.getElementById("cam-error-text").textContent = d.error || "Connection failed.";
+        errEl.style.display = "";
+      }
+    })
+    .catch(() => {
+      btn.textContent = "Connect"; btn.disabled = false;
+    });
+}
+
+function disconnectCamera() {
+  fetch("{{ url_for('admin_live_stop') }}", { method: "POST" })
+    .then(r => r.json())
+    .then(() => {
+      setCamBadge(false, "OFFLINE");
+      document.getElementById("btn-disconnect").style.display = "none";
+      document.getElementById("ls-fps").textContent = "—";
+    });
+}
+
+/* ── Violation log polling ────────────────────────────────── */
+
+let _lastViolationId = null;
+
+function renderLog(violations) {
+  const wrap = document.getElementById("violation-log");
+  if (!violations.length) {
+    wrap.innerHTML = `<div style="text-align:center; padding:32px; color:var(--text-muted);
+                      font-size:13px; font-family:var(--font-mono);">No violations yet.</div>`;
+    return;
+  }
+
+  // Check if newest record changed → flash alert
+  const newest = violations[0];
+  if (_lastViolationId && newest.id !== _lastViolationId) {
+    const alert = document.getElementById("violation-alert");
+    alert.classList.add("visible");
+    setTimeout(() => alert.classList.remove("visible"), 5000);
+  }
+  _lastViolationId = newest.id;
+
+  wrap.innerHTML = violations.map(v => {
+    const ts    = (v.timestamp || "").substring(0, 19).replace("T", " ");
+    const plate = v.plate_number || "UNDETECTED";
+    const sev   = (v.severity || "").toLowerCase();
+    const type  = (v.violation_type || "").replace(/_/g, " ");
+    return `
+      <div class="log-entry">
+        <div class="log-dot ${sev}"></div>
+        <div class="log-text">
+          <div class="log-plate">${plate}</div>
+          <div class="log-meta">${ts} · ${type}</div>
+        </div>
+        <a class="log-link" href="/admin/violations/${v.id}">VIEW</a>
+      </div>`;
+  }).join("");
+}
+
+function pollViolations() {
+  fetch("{{ url_for('admin_live_recent') }}")
+    .then(r => r.json())
+    .then(d => renderLog(d.violations || []))
+    .catch(() => {});
+}
+
+/* ── Stat refresh ────────────────────────────────────────── */
+
+function refreshStats() {
+  fetch("{{ url_for('admin_dashboard_data') }}")
+    .then(r => r.json())
+    .then(d => {
+      document.getElementById("ls-total").textContent = d.total_violations;
+      document.getElementById("ls-today").textContent = d.violations_today;
+    })
+    .catch(() => {});
+}
+
+/* ── Init ────────────────────────────────────────────────── */
+
+document.addEventListener("DOMContentLoaded", () => {
+  pollViolations();
+  refreshStats();
+  setInterval(pollViolations, 3000);
+  setInterval(refreshStats,   10000);
+});
+</script>
+{% endblock %}

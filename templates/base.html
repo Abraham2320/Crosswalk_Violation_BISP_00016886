@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Crosswalk Enforcement System{% endblock %}</title>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <!-- Base styles -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/theme.css') }}">
+
+  {% block extra_css %}{% endblock %}
+</head>
+<body>
+
+{% block nav %}
+<nav class="nav-bar">
+  <!-- Brand -->
+  <a href="{{ url_for('index') }}" class="nav-brand">
+    <!-- CCTV camera icon (inline SVG 20×20) -->
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <rect x="1" y="5" width="11" height="8" rx="1.5" stroke="currentColor" stroke-width="1.5"/>
+      <path d="M12 8.5L17 6v7l-5-2.5" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+      <circle cx="5.5" cy="9" r="1.5" fill="currentColor"/>
+      <line x1="5" y1="13" x2="5" y2="16" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+      <line x1="3" y1="16" x2="7" y2="16" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+    </svg>
+    Crosswalk Enforcement System
+  </a>
+
+  <!-- Right side -->
+  <div class="nav-links">
+    {% if session.get('admin') %}
+      <a href="{{ url_for('admin_dashboard') }}"
+         class="nav-link {% if request.endpoint == 'admin_dashboard' %}active{% endif %}">
+        Dashboard
+      </a>
+      <a href="{{ url_for('admin_violations') }}"
+         class="nav-link {% if request.endpoint in ['admin_violations','admin_violation_detail'] %}active{% endif %}">
+        Violations
+      </a>
+      <a href="{{ url_for('admin_vehicles') }}"
+         class="nav-link {% if request.endpoint in ['admin_vehicles','admin_vehicle_detail'] %}active{% endif %}">
+        Vehicles
+      </a>
+      <a href="{{ url_for('admin_analytics') }}"
+         class="nav-link {% if request.endpoint == 'admin_analytics' %}active{% endif %}">
+        Analytics
+      </a>
+      <a href="{{ url_for('admin_live') }}"
+         class="nav-link {% if request.endpoint == 'admin_live' %}active{% endif %}"
+         style="{% if request.endpoint == 'admin_live' %}color:var(--accent-green);{% endif %}">
+        &#9679; Live
+      </a>
+      <a href="{{ url_for('admin_export_csv') }}" class="nav-link">Export</a>
+      <a href="{{ url_for('admin_logout') }}" class="btn-danger btn-sm" style="margin-left:8px;">Logout</a>
+    {% endif %}
+  </div>
+</nav>
+{% endblock %}
+
+<div class="main-content">
+  {% block content %}{% endblock %}
+</div>
+
+<footer class="site-footer">
+  WIUT Traffic Enforcement System &middot; {{ current_year }}
+</footer>
+
+{% block extra_js %}{% endblock %}
+</body>
+</html>

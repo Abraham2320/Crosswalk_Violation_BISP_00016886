@@ -1,0 +1,192 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — Crosswalk Enforcement{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="page-container">
+
+  <!-- Page header -->
+  <div class="page-header" style="display:flex; align-items:center; justify-content:space-between;">
+    <div>
+      <div class="page-title">Dashboard</div>
+      <div class="page-subtitle">System overview — all time</div>
+    </div>
+    <div class="live-indicator">
+      <div class="live-dot"></div>
+      System Active
+    </div>
+  </div>
+
+  <!-- KPI stat cards -->
+  <div class="grid-4" style="margin-bottom:24px;">
+
+    <!-- Total violations -->
+    <div class="stat-card">
+      <div class="stat-card-icon">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+          <path d="M10 2L2 17h16L10 2z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+          <line x1="10" y1="8" x2="10" y2="12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          <circle cx="10" cy="14.5" r="0.75" fill="currentColor"/>
+        </svg>
+      </div>
+      <div class="stat-value" id="stat-total">{{ total_violations }}</div>
+      <div class="stat-label">Total Violations</div>
+    </div>
+
+    <!-- High severity -->
+    <div class="stat-card">
+      <div class="stat-card-icon">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+          <path d="M10 2l8 14H2L10 2z" stroke="currentColor" stroke-width="1.5"/>
+          <path d="M10 3L3 16h14L10 3z" stroke="currentColor" stroke-width="0.5" opacity="0.3"/>
+          <circle cx="10" cy="13" r="1" fill="currentColor"/>
+          <line x1="10" y1="8" x2="10" y2="11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <div class="stat-value">{{ high_severity_count }}</div>
+      <div class="stat-label">High Severity</div>
+    </div>
+
+    <!-- Today -->
+    <div class="stat-card">
+      <div class="stat-card-icon">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+          <circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="1.5"/>
+          <line x1="10" y1="10" x2="10" y2="6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          <line x1="10" y1="10" x2="13" y2="12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <div class="stat-value" id="stat-today">{{ violations_today }}</div>
+      <div class="stat-label">Today</div>
+    </div>
+
+    <!-- Unique vehicles -->
+    <div class="stat-card">
+      <div class="stat-card-icon">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+          <rect x="2" y="7" width="16" height="8" rx="2" stroke="currentColor" stroke-width="1.5"/>
+          <path d="M5 7V6a3 3 0 016 0v1" stroke="currentColor" stroke-width="1.5"/>
+          <circle cx="6" cy="15" r="1.5" fill="currentColor"/>
+          <circle cx="14" cy="15" r="1.5" fill="currentColor"/>
+          <line x1="2" y1="11" x2="18" y2="11" stroke="currentColor" stroke-width="1" opacity="0.4"/>
+        </svg>
+      </div>
+      <div class="stat-value">{{ unique_vehicles }}</div>
+      <div class="stat-label">Unique Vehicles</div>
+    </div>
+
+  </div>
+
+  <!-- Plate detection rate -->
+  <div style="margin-bottom:24px; font-family:var(--font-mono); font-size:12px; color:var(--text-muted);">
+    Plate detection rate:
+    <span class="text-amber" style="font-size:14px; margin-left:4px;">{{ plate_detected_rate }}%</span>
+  </div>
+
+  <!-- Two column layout -->
+  <div class="dashboard-grid">
+
+    <!-- Left: Recent violations -->
+    <div class="card">
+      <div class="card-title">Recent Violations</div>
+      <div class="table-scroll">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Plate</th>
+              <th>Type</th>
+              <th>Severity</th>
+              <th>Location</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for v in recent_violations %}
+            <tr class="clickable"
+                data-href="{{ url_for('admin_violation_detail', violation_id=v.id) }}"
+                onclick="window.location.href=this.dataset.href">
+              <td class="mono" style="white-space:nowrap;">
+                {{ v.timestamp[:16].replace('T',' ') if v.timestamp else '—' }}
+              </td>
+              <td class="amber">
+                {{ v.plate_number or '—' }}
+              </td>
+              <td>
+                {% if v.violation_type == 'FAILED_TO_YIELD' %}
+                  <span style="font-size:12px; color:var(--accent-red);">Failed to Yield</span>
+                {% elif v.violation_type == 'UNSAFE_REENTRY' %}
+                  <span style="font-size:12px; color:var(--accent-amber);">Unsafe Re-entry</span>
+                {% else %}
+                  <span style="font-size:12px; color:var(--text-muted);">{{ v.violation_type or '—' }}</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if v.severity == 'HIGH' %}
+                  <span class="badge badge-high">HIGH</span>
+                {% else %}
+                  <span class="badge badge-low">LOW</span>
+                {% endif %}
+              </td>
+              <td style="max-width:160px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px; color:var(--text-secondary);">
+                {{ v.display_location or '—' }}
+              </td>
+            </tr>
+            {% else %}
+            <tr>
+              <td colspan="5" style="text-align:center; color:var(--text-muted); padding:32px;">
+                No violations recorded yet.
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div style="margin-top:16px;">
+        <a href="{{ url_for('admin_violations') }}" class="btn-ghost btn-sm">View All Violations</a>
+      </div>
+    </div>
+
+    <!-- Right column -->
+    <div style="display:flex; flex-direction:column; gap:20px;">
+
+      <!-- Hourly chart -->
+      <div class="card">
+        <div class="card-title">Violations by Hour</div>
+        <div class="chart-wrap" id="hourly-chart"></div>
+      </div>
+
+      <!-- Top vehicles -->
+      <div class="card">
+        <div class="card-title">Top Offenders</div>
+        {% if top_vehicles %}
+          {% set max_cnt = top_vehicles[0].cnt %}
+          {% for v in top_vehicles %}
+          <div class="top-vehicle-row">
+            <span class="top-vehicle-label">{{ v.label }}</span>
+            <span class="top-vehicle-count">{{ v.cnt }}</span>
+          </div>
+          <div class="mini-bar-track">
+            <div class="mini-bar-fill" style="width:{{ (v.cnt / max_cnt * 100)|round|int }}%"></div>
+          </div>
+          {% if not loop.last %}<div style="height:10px;"></div>{% endif %}
+          {% endfor %}
+        {% else %}
+          <p class="text-muted" style="font-size:13px;">No data yet.</p>
+        {% endif %}
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<!-- Pass hourly data to JS -->
+<script>window.HOURLY_DATA = {{ hourly_data | tojson }};</script>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+{% endblock %}

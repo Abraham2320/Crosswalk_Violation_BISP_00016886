@@ -47,6 +47,25 @@ class RuntimeSettings:
     ocr_workers: int = int(os.getenv("OCR_WORKERS", "1"))
     location_code: str = os.getenv("LOCATION_CODE", "CW-A-01")
 
+    # ── Camera source for live streaming (used by stream.py + app.py) ────────
+    # Set to webcam index (0, 1, 2…) or a full RTSP/HTTP URL:
+    #   CAMERA_SOURCE=0                              # first USB/built-in webcam
+    #   CAMERA_SOURCE=rtsp://admin:pass@192.168.1.64:554/stream1
+    #   CAMERA_SOURCE=http://192.168.1.100:8080/video
+    camera_source: str = os.getenv("CAMERA_SOURCE", "0")
+
+    # ── Yandex Maps API key (used in admin invoices + violation detail) ───────
+    # Get your key at: https://developer.tech.yandex.com/services/
+    # Then add to your .env file:  YANDEX_MAPS_API_KEY=<your_key>
+    yandex_maps_api_key: str = os.getenv("YANDEX_MAPS_API_KEY", "")
+
+    # ── Location GPS coordinates (set per crosswalk camera) ──────────────────
+    # Used to pin violations on the map.  Tashkent examples:
+    #   41.2963,69.2798  → Amir Temur Ave crosswalk
+    #   41.2959,69.2697  → Navoi Street crosswalk
+    location_latitude:  float = float(os.getenv("LOCATION_LATITUDE",  "41.2963"))
+    location_longitude: float = float(os.getenv("LOCATION_LONGITUDE", "69.2798"))
+
 
 @dataclass(slots=True)
 class StorageSettings:

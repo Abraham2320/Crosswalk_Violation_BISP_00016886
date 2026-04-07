@@ -55,6 +55,7 @@ if SQLALCHEMY_AVAILABLE:
         report_path: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
         invoice_path: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
         violation_type: Mapped[str] = mapped_column(String(64), nullable=False)
+        severity: Mapped[str] = mapped_column(String(32), nullable=False, default="HIGH")
         pedestrian_direction: Mapped[str] = mapped_column(String(32), nullable=False)
         confidence: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
         status: Mapped[str] = mapped_column(String(32), default="pending", nullable=False)
@@ -67,6 +68,7 @@ if SQLALCHEMY_AVAILABLE:
             ForeignKey("vehicles.id", ondelete="SET NULL"),
             nullable=True,
         )
+        vehicle_speed_estimate: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
 
         vehicle: Mapped[Optional[VehicleRecord]] = relationship(back_populates="violations")
         invoice: Mapped[Optional["InvoiceRecord"]] = relationship(back_populates="violation", uselist=False)
@@ -243,6 +245,7 @@ else:
         report_path: Optional[str]
         invoice_path: Optional[str]
         violation_type: str
+        severity: str
         pedestrian_direction: str
         confidence: float
         status: str
@@ -251,6 +254,7 @@ else:
         llm_report_json: Optional[str]
         llm_report_text: Optional[str]
         vehicle_ref_id: Optional[str] = None
+        vehicle_speed_estimate: Optional[float] = None
 
 
     @dataclass(slots=True)
@@ -298,6 +302,7 @@ else:
                         report_path TEXT,
                         invoice_path TEXT,
                         violation_type TEXT NOT NULL,
+                        severity TEXT NOT NULL DEFAULT 'HIGH',
                         pedestrian_direction TEXT NOT NULL,
                         confidence REAL NOT NULL DEFAULT 0,
                         status TEXT NOT NULL,
@@ -305,7 +310,10 @@ else:
                         created_at TEXT NOT NULL,
                         llm_report_json TEXT,
                         llm_report_text TEXT,
-                        vehicle_ref_id TEXT
+                        vehicle_ref_id TEXT,
+                        snapshot_path TEXT,
+                        location_name TEXT,
+                        vehicle_speed_estimate REAL
                     )
                     """
                 )
@@ -321,6 +329,19 @@ else:
                     )
                     """
                 )
+                # Migration: add columns if DB was created before they existed
+                for _col, _def in [
+                    ("severity",               "TEXT NOT NULL DEFAULT 'HIGH'"),
+                    ("snapshot_path",          "TEXT"),
+                    ("location_name",          "TEXT"),
+                    ("vehicle_speed_estimate", "REAL"),
+                ]:
+                    try:
+                        conn.execute(
+                            f"ALTER TABLE violations ADD COLUMN {_col} {_def}"
+                        )
+                    except sqlite3.OperationalError:
+                        pass  # column already exists
                 conn.execute("CREATE INDEX IF NOT EXISTS ix_violations_plate_number ON violations (plate_number)")
                 conn.execute(
                     "CREATE INDEX IF NOT EXISTS ix_violations_plate_timestamp ON violations (plate_number, timestamp)"
@@ -365,6 +386,7 @@ else:
                 report_path=row["report_path"],
                 invoice_path=row["invoice_path"],
                 violation_type=row["violation_type"],
+                severity=row["severity"] if "severity" in row.keys() else "HIGH",
                 pedestrian_direction=row["pedestrian_direction"],
                 confidence=row["confidence"],
                 status=row["status"],
@@ -373,6 +395,7 @@ else:
                 llm_report_json=row["llm_report_json"],
                 llm_report_text=row["llm_report_text"],
                 vehicle_ref_id=row["vehicle_ref_id"],
+                vehicle_speed_estimate=row["vehicle_speed_estimate"] if "vehicle_speed_estimate" in row.keys() else None,
             )
 
         def _row_to_invoice(self, row: sqlite3.Row) -> InvoiceRecord:
@@ -446,9 +469,11 @@ else:
                     """
                     INSERT INTO violations (
                         id, timestamp, plate_number, vehicle_id, vehicle_image_path, frame_image_path,
-                        plate_image_path, report_path, invoice_path, violation_type, pedestrian_direction,
-                        confidence, status, location, created_at, llm_report_json, llm_report_text, vehicle_ref_id
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        plate_image_path, report_path, invoice_path, violation_type, severity,
+                        pedestrian_direction, confidence, status, location, created_at,
+                        llm_report_json, llm_report_text, vehicle_ref_id, snapshot_path,
+                        vehicle_speed_estimate
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         payload["id"],
@@ -461,6 +486,7 @@ else:
                         payload.get("report_path"),
                         payload.get("invoice_path"),
                         payload["violation_type"],
+                        payload.get("severity", "HIGH"),
                         payload["pedestrian_direction"],
                         payload["confidence"],
                         payload["status"],
@@ -469,6 +495,8 @@ else:
                         payload.get("llm_report_json"),
                         payload.get("llm_report_text"),
                         vehicle_ref_id,
+                        payload.get("snapshot_path"),
+                        payload.get("vehicle_speed_estimate"),
                     ),
                 )
                 row = conn.execute("SELECT * FROM violations WHERE id = ?", (payload["id"],)).fetchone()

@@ -79,6 +79,7 @@ class EnforcementPipeline:
             "report_path": str(report_path),
             "invoice_path": str(invoice_path),
             "violation_type": evidence.event.violation_type,
+            "severity": evidence.event.severity,
             "pedestrian_direction": evidence.event.pedestrian_direction,
             "status": "processed" if plate_number else "pending",
             "location": evidence.event.location,
@@ -86,6 +87,8 @@ class EnforcementPipeline:
             "created_at": evidence.event.timestamp,
             "llm_report_json": json.dumps(report_result.report_json),
             "llm_report_text": report_result.report_text,
+            "snapshot_path": evidence.event.snapshot_path,
+            "vehicle_speed_estimate": evidence.event.vehicle_speed_estimate,
         }
         self.repository.save_violation(payload)
         return evidence.event.violation_id

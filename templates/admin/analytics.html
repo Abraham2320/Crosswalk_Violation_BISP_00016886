@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+{% block title %}Analytics — Crosswalk Enforcement{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="page-container">
+
+  <div class="page-header">
+    <div class="page-title">Analytics</div>
+    <div class="page-subtitle">Patterns & insights across all recorded violations</div>
+  </div>
+
+  <!-- ── 1. Violations over time (30 days line chart) ──────── -->
+  <div class="card" style="margin-bottom:20px;">
+    <div class="card-title">Violations Over Time — Last 30 Days</div>
+    {% if daily_counts %}
+      {% set max_cnt = daily_counts | map(attribute='cnt') | max %}
+      {% set pts_count = daily_counts | length %}
+      {% set W = 900 %}
+      {% set H = 140 %}
+      {% set padL = 36 %}{% set padR = 8 %}
+      {% set padT = 12 %}{% set padB = 28 %}
+      {% set chartW = W - padL - padR %}
+      {% set chartH = H - padT - padB %}
+
+      {# Build polyline points #}
+      {% set ns = namespace(pts='', fill='') %}
+      {% for d in daily_counts %}
+        {% set x = padL + (loop.index0 / (pts_count - 1 if pts_count > 1 else 1)) * chartW %}
+        {% set y = padT + chartH - (d.cnt / (max_cnt if max_cnt > 0 else 1)) * chartH %}
+        {% set ns.pts = ns.pts + x|round(1)|string + ',' + y|round(1)|string + ' ' %}
+        {% set ns.fill = ns.fill + x|round(1)|string + ',' + y|round(1)|string + ' ' %}
+      {% endfor %}
+      {# Close fill path #}
+      {% set last_x = padL + chartW %}
+      {% set last_y = padT + chartH %}
+      {% set first_x = padL %}
+      {% set fill_path = ns.fill + last_x|string + ',' + last_y|string + ' ' + first_x|string + ',' + last_y|string %}
+
+      <div class="chart-wrap">
+        <svg width="100%" height="{{ H }}" viewBox="0 0 {{ W }} {{ H }}" preserveAspectRatio="none">
+          <!-- Grid lines -->
+          {% for t in range(5) %}
+            {% set yg = padT + (t / 4) * chartH %}
+            <line x1="{{ padL }}" y1="{{ yg }}" x2="{{ padL + chartW }}" y2="{{ yg }}"
+                  stroke="#1F2937" stroke-width="1"/>
+            <text x="{{ padL - 4 }}" y="{{ yg + 3 }}" text-anchor="end"
+                  font-size="9" fill="#4B5563" font-family="'JetBrains Mono',monospace">
+              {{ ((1 - t/4) * max_cnt)|round|int }}
+            </text>
+          {% endfor %}
+          <!-- Fill area -->
+          <polygon points="{{ fill_path }}" fill="#F59E0B" opacity="0.08"/>
+          <!-- Line -->
+          <polyline points="{{ ns.pts }}" fill="none" stroke="#F59E0B" stroke-width="2" stroke-linejoin="round"/>
+          <!-- Date labels every 5 -->
+          {% for d in daily_counts %}
+            {% if loop.index0 % 5 == 0 %}
+              {% set x = padL + (loop.index0 / (pts_count - 1 if pts_count > 1 else 1)) * chartW %}
+              <text x="{{ x|round(1) }}" y="{{ H - 4 }}" text-anchor="middle"
+                    font-size="9" fill="#4B5563" font-family="'JetBrains Mono',monospace">
+                {{ d.day[5:] if d.day else '' }}
+              </text>
+            {% endif %}
+          {% endfor %}
+        </svg>
+      </div>
+    {% else %}
+      <p class="text-muted" style="font-size:13px; padding:20px 0;">
+        No data recorded in the last 30 days.
+      </p>
+    {% endif %}
+  </div>
+
+  <!-- ── 2. 24-hour heatmap ────────────────────────────────── -->
+  <div class="card" style="margin-bottom:20px;">
+    <div class="card-title">24-Hour Heatmap</div>
+    {% set max_h = hourly_heatmap.values()|list|max if hourly_heatmap else 1 %}
+    <div class="heatmap-grid">
+      {% for h in range(24) %}
+        {% set cnt = hourly_heatmap.get(h, 0) %}
+        {% set ratio = cnt / max_h if max_h > 0 else 0 %}
+        {# Interpolate near-black to amber: #0F1117 → #F59E0B #}
+        {% set r = (15 + (245-15) * ratio)|round|int %}
+        {% set g = (17 + (158-17) * ratio)|round|int %}
+        {% set b = (23 + (11-23) * ratio)|round|int %}
+        <div>
+          <div class="heatmap-cell"
+               style="background:rgb({{ r }},{{ g }},{{ b }});"
+               title="{{ '%02d:00'|format(h) }} — {{ cnt }} violation{{ 's' if cnt != 1 else '' }}">
+          </div>
+          <div class="heatmap-label">{{ '%02d'|format(h) }}</div>
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- ── 3. Violation type breakdown ──────────────────────── -->
+  <div class="card" style="margin-bottom:20px;">
+    <div class="card-title">Violation Type Breakdown</div>
+    {% set fty = violation_type_split.get('FAILED_TO_YIELD', 0) %}
+    {% set usr = violation_type_split.get('UNSAFE_REENTRY', 0) %}
+    {% set total_t = fty + usr %}
+    <div class="type-split">
+      <div class="type-count">
+        <div class="type-number" style="color:var(--accent-red);">{{ fty }}</div>
+        <div class="type-name">Failed to Yield</div>
+      </div>
+      <div class="type-count">
+        <div class="type-number" style="color:var(--accent-amber);">{{ usr }}</div>
+        <div class="type-name">Unsafe Re-entry</div>
+      </div>
+    </div>
+    {% if total_t > 0 %}
+    <div class="split-bar">
+      <div class="split-bar-fill" style="width:{{ ((fty / total_t) * 100)|round|int }}%;"></div>
+    </div>
+    <div style="display:flex; justify-content:space-between; margin-top:6px;
+                font-family:var(--font-mono); font-size:11px; color:var(--text-muted);">
+      <span style="color:var(--accent-red);">{{ ((fty/total_t)*100)|round|int }}% FTY</span>
+      <span style="color:var(--accent-amber);">{{ ((usr/total_t)*100)|round|int }}% USR</span>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- ── 4. Top locations ──────────────────────────────────── -->
+  <div class="card">
+    <div class="card-title">Top Locations</div>
+    {% if top_locations and top_locations[0].location %}
+      {% set max_loc = top_locations[0].cnt %}
+      {% set W = 700 %}{% set H = 30 * (top_locations|length) + 16 %}
+      {% set padL = 220 %}{% set padR = 60 %}{% set barH = 18 %}
+      <div class="chart-wrap">
+        <svg width="100%" height="{{ H }}" viewBox="0 0 {{ W }} {{ H }}">
+          {% for loc in top_locations %}
+            {% set y = 8 + loop.index0 * 30 %}
+            {% set bw = ((loc.cnt / max_loc) * (W - padL - padR))|round|int %}
+            <text x="{{ padL - 8 }}" y="{{ y + barH / 2 + 4 }}"
+                  text-anchor="end" font-size="11" fill="#9CA3AF"
+                  font-family="'Rajdhani',sans-serif">
+              {{ loc.location[:28] }}{% if loc.location|length > 28 %}…{% endif %}
+            </text>
+            <rect x="{{ padL }}" y="{{ y }}" width="{{ bw }}" height="{{ barH }}"
+                  fill="#F59E0B" opacity="0.8" rx="2"/>
+            <text x="{{ padL + bw + 6 }}" y="{{ y + barH / 2 + 4 }}"
+                  font-size="11" fill="#F59E0B"
+                  font-family="'JetBrains Mono',monospace">{{ loc.cnt }}</text>
+          {% endfor %}
+        </svg>
+      </div>
+    {% else %}
+      <div style="padding:20px 0; text-align:center;">
+        <p class="text-muted" style="font-size:13px;">Location Data Pending</p>
+        <p style="font-family:var(--font-mono); font-size:11px; color:var(--text-muted); margin-top:8px;">
+          Set <code style="color:var(--accent-amber);">LOCATION_NAME</code> env var per camera to populate this chart.
+        </p>
+      </div>
+    {% endif %}
+  </div>
+
+</div>
+{% endblock %}
