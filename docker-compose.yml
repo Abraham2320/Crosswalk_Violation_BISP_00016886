@@ -1,32 +1,40 @@
 version: "3.9"
 
 services:
-  api:
+  # ── Flask admin panel + live stream ───────────────────────────────────────
+  web:
     build: .
-    container_name: crosswalk-api
+    image: crosswalk-enforcement
+    container_name: crosswalk_web
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    volumes:
+      # Persist DB, polygon, snapshots and artifacts across restarts
+      - ./crosswalk_violations.db:/app/crosswalk_violations.db
+      - ./crosswalk_polygon.json:/app/crosswalk_polygon.json
+      - ./static/snapshots:/app/static/snapshots
+      - ./artifacts:/app/artifacts
     env_file:
-      - .env.example
+      - .env
     environment:
-      DATABASE_URL: postgresql+psycopg://crosswalk:crosswalk@db:5432/crosswalk
-    command: uvicorn api.main:app --host 0.0.0.0 --port 8000
+      FLASK_ENV: production
+    # Uncomment for USB webcam access inside the container (Linux only):
+    # devices:
+    #   - /dev/video0:/dev/video0
+
+  # ── Streamlit analytics dashboard ─────────────────────────────────────────
+  dashboard:
+    build: .
+    image: crosswalk-enforcement
+    container_name: crosswalk_dashboard
+    restart: unless-stopped
     ports:
-      - "8000:8000"
+      - "8501:8501"
     volumes:
-      - ./:/app
+      - ./crosswalk_violations.db:/app/crosswalk_violations.db
+    env_file:
+      - .env
+    command: streamlit run dashboard.py --server.port 8501 --server.address 0.0.0.0 --server.headless true
     depends_on:
-      - db
-
-  db:
-    image: postgres:16
-    container_name: crosswalk-db
-    environment:
-      POSTGRES_DB: crosswalk
-      POSTGRES_USER: crosswalk
-      POSTGRES_PASSWORD: crosswalk
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-
-volumes:
-  postgres_data:
+      - web

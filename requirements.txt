@@ -1,5 +1,6 @@
 # ── Core CV / detection ─────────────────────────────────────────────────────
 ultralytics>=8.2.0          # YOLOv8 + built-in ByteTrack tracker
+lap>=0.5.12                 # Linear Assignment Problem solver — required by ByteTrack for track IDs
 opencv-python>=4.9.0        # frame capture, warp, drawing
 numpy>=1.26.0               # array ops used throughout
 supervision>=0.21.0         # ByteTrack / tracker utilities (optional companion)
@@ -29,6 +30,8 @@ reportlab>=4.0.0            # PDF invoice generation (falls back to .txt if abse
 Flask>=2.3.0
 Werkzeug>=2.3.0             # password hashing (werkzeug.security)
 Pillow>=10.0.0              # image utilities for snapshot post-processing
+gunicorn>=22.0.0            # production WSGI server
+python-dotenv>=1.0.1        # load .env when app is run directly via python
 
 # ── Optional alternative OCR backend ────────────────────────────────────────
 # paddleocr>=2.8.0          # uncomment to enable PaddleOCR instead of EasyOCR

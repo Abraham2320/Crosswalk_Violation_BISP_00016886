@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(PYTHONPATH=src \"CV_venv/Scripts/python.exe\" -c \"import app; print\\('app.py OK'\\)\")",
+      "Bash(PYTHONPATH=src \"CV_venv/Scripts/python.exe\" -c \"from live_processor import live_proc; print\\('live_processor OK'\\)\")"
+    ]
+  }
+}

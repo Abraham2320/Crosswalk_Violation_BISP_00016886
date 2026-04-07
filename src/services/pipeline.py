@@ -83,6 +83,7 @@ class EnforcementPipeline:
             "pedestrian_direction": evidence.event.pedestrian_direction,
             "status": "processed" if plate_number else "pending",
             "location": evidence.event.location,
+            "location_name": evidence.event.location,
             "confidence": evidence.event.confidence,
             "created_at": evidence.event.timestamp,
             "llm_report_json": json.dumps(report_result.report_json),

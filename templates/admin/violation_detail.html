@@ -195,7 +195,7 @@
                     border:1px solid var(--border); background:var(--bg-elevated);">
         </div>
         {% if yandex_maps_key %}
-        <script src="https://api-maps.yandex.ru/2.1/?apikey={{ yandex_maps_key }}&lang=en_US"></script>
+        <script src="https://enterprise.api-maps.yandex.ru/2.1/?apikey={{ yandex_maps_key }}&lang=en_US"></script>
         <script>
           ymaps.ready(function(){
             var m = new ymaps.Map("detail-map",{

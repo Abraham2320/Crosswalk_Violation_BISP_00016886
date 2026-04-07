@@ -311,6 +311,7 @@ def main():
                         pt = ped_tracks[obj_id]
                         pt.prev_centroid = pt.centroid
                         pt.centroid = (cx, cy)
+                        pt.bbox = (x1, y1, x2, y2)  # store bbox for box-intersection FSM
                         if pt.prev_centroid is not None:
                             pt.velocity_history.append((
                                 cx - pt.prev_centroid[0],

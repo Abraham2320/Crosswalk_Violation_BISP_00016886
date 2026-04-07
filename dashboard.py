@@ -281,7 +281,7 @@ Be concise, factual, and actionable. Write in a formal but readable tone."""
             try:
                 client = anthropic.Anthropic()
                 message = client.messages.create(
-                    model="claude-sonnet-4-5",
+                    model="claude-sonnet-4-6",
                     max_tokens=800,
                     messages=[{"role": "user", "content": prompt}],
                 )

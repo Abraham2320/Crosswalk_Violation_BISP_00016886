@@ -6,10 +6,16 @@ Violator portal → /portal       (public)
 """
 from __future__ import annotations
 
+import os
+
+# Must be set before any OpenCV or PyTorch import to prevent the
+# "libiomp5md.dll already initialized" OMP conflict on Windows.
+os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
+
 import csv
 import io
+import json
 import math
-import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -34,6 +40,7 @@ from auth import (
     record_failed_attempt,
 )
 from database import db_connection, init_db, log_audit
+from live_processor import live_proc
 from stream import camera_manager, mjpeg_generator
 
 # ---------------------------------------------------------------------------
@@ -42,8 +49,16 @@ from stream import camera_manager, mjpeg_generator
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 
+try:
+    from dotenv import load_dotenv
+except ImportError:  # optional dependency in case environment already provides vars
+    load_dotenv = None
+
+if load_dotenv is not None:
+    load_dotenv(PROJECT_ROOT / ".env")
+
 app = Flask(__name__)
-app.secret_key = "cw-enforcement-secret-change-in-production-please"
+app.secret_key = os.getenv("SECRET_KEY", "cw-enforcement-dev-secret-change-in-production")
 
 with app.app_context():
     init_db()
@@ -545,10 +560,12 @@ def inject_globals():
 @app.route("/admin/live")
 @login_required
 def admin_live():
+    demo_source = os.getenv("DEMO_VIDEO_SOURCE", "Videos/v2.mp4")
     return render_template(
         "admin/live.html",
         camera_status=camera_manager.status(),
-        default_source=os.getenv("CAMERA_SOURCE", "0"),
+        default_source=os.getenv("CAMERA_SOURCE", demo_source),
+        demo_source=demo_source,
     )
 
 
@@ -560,6 +577,15 @@ def admin_live_feed():
         mjpeg_generator(camera_manager),
         mimetype="multipart/x-mixed-replace; boundary=frame",
     )
+
+
+@app.route("/admin/live/snapshot")
+@login_required
+def admin_live_snapshot():
+    """Return the current frame as a single JPEG — used for polygon calibration freeze-frame."""
+    jpeg = camera_manager.get_jpeg()
+    return Response(jpeg, mimetype="image/jpeg",
+                    headers={"Cache-Control": "no-store"})
 
 
 @app.route("/admin/live/start", methods=["POST"])
@@ -585,6 +611,66 @@ def admin_live_status():
     return jsonify(**camera_manager.status())
 
 
+@app.route("/admin/live/checks")
+@login_required
+def admin_live_checks():
+    checks = {}
+
+    try:
+        import cv2
+
+        checks["opencv"] = {"ok": True, "detail": f"OpenCV {cv2.__version__}"}
+        try:
+            cv2.ORB_create(nfeatures=250)
+            checks["orb"] = {"ok": True, "detail": "ORB feature extractor available"}
+        except Exception as exc:
+            checks["orb"] = {"ok": False, "detail": f"ORB unavailable: {exc}"}
+    except Exception as exc:
+        checks["opencv"] = {"ok": False, "detail": f"OpenCV import failed: {exc}"}
+        checks["orb"] = {"ok": False, "detail": "ORB unavailable because OpenCV failed"}
+
+    try:
+        from config import settings as cfg
+
+        model_path = Path(cfg.models.detection_model_path)
+        checks["yolo"] = {
+            "ok": model_path.exists(),
+            "detail": f"Model path: {model_path}",
+        }
+    except Exception as exc:
+        checks["yolo"] = {"ok": False, "detail": f"YOLO config failed: {exc}"}
+
+    try:
+        from logic.violation import check_violation, update_pedestrian_state
+
+        checks["fsm_rules"] = {
+            "ok": callable(check_violation) and callable(update_pedestrian_state),
+            "detail": "FSM + violation rule functions imported",
+        }
+    except Exception as exc:
+        checks["fsm_rules"] = {"ok": False, "detail": f"Rules import failed: {exc}"}
+
+    pipeline_initialized = getattr(live_proc, "_pipeline", None) is not None
+    pipeline_error = getattr(live_proc, "last_error", "")
+    checks["pipeline"] = {
+        "ok": pipeline_initialized or not bool(pipeline_error),
+        "detail": (
+            "Pipeline initialized"
+            if pipeline_initialized
+            else f"Pipeline start failed: {pipeline_error}"
+            if pipeline_error
+            else "Pipeline ready (starts when detection starts)"
+        ),
+    }
+
+    checks["camera"] = {
+        "ok": camera_manager.status().get("connected", False),
+        "detail": camera_manager.status().get("source") or "No source connected",
+    }
+
+    return jsonify(ok=all(v.get("ok") for v in checks.values()), checks=checks)
+
+
 @app.route("/admin/live/recent")
 @login_required
 def admin_live_recent():
@@ -599,9 +685,9 @@ def admin_live_recent():
     return jsonify(violations=[dict(r) for r in rows])
 
 
-# ---------------------------------------------------------------------------
-# ── ADMIN INVOICE ────────────────────────────────────────────────────────────
-# ---------------------------------------------------------------------------
+
+# Admin invoice view with payment deadline calculation (30 days from violation date) and audit logging for invoice views.
+ 
 
 @app.route("/admin/violations/<string:violation_id>/invoice")
 @login_required
@@ -634,9 +720,88 @@ def admin_invoice(violation_id: str):
     )
 
 
+# Live detection controls and polygon calibration for the admin live page. The polygon is saved as a simple list of points in crosswalk_polygon.json, which the live processor loads on startup and whenever it's updated via the admin interface.
+
+@app.route("/admin/live/detection/start", methods=["POST"])
+@login_required
+def admin_live_detection_start():
+    cam = camera_manager.status()
+    if not cam.get("connected"):
+        return jsonify(
+            ok=False,
+            error="Camera is not connected. Connect a source first.",
+            **live_proc.get_stats(),
+        ), 400
+
+    ok = live_proc.start_async()
+    log_audit("DETECTION_START", username=_admin())
+    return jsonify(ok=ok, **live_proc.get_stats())
+
+
+@app.route("/admin/live/detection/stop", methods=["POST"])
+@login_required
+def admin_live_detection_stop():
+    live_proc.stop()
+    log_audit("DETECTION_STOP", username=_admin())
+    return jsonify(ok=True, **live_proc.get_stats())
+
+
+@app.route("/admin/live/detection/status")
+@login_required
+def admin_live_detection_status():
+    return jsonify(**live_proc.get_stats())
+
+
+@app.route("/admin/live/polygon", methods=["GET"])
+@login_required
+def admin_live_polygon_get():
+    polygon_path = PROJECT_ROOT / "crosswalk_polygon.json"
+    if polygon_path.exists():
+        try:
+            pts = json.loads(polygon_path.read_text())
+            if not isinstance(pts, list) or len(pts) < 4:
+                return jsonify(points=[])
+            return jsonify(points=pts)
+        except Exception:
+            pass
+    return jsonify(points=[])
+
+
+@app.route("/admin/live/polygon", methods=["POST"])
+@login_required
+def admin_live_polygon_save():
+    data   = request.get_json(silent=True) or {}
+    points = data.get("points", [])
+    polygon_path = PROJECT_ROOT / "crosswalk_polygon.json"
+
+    if not points:
+        if polygon_path.exists():
+            polygon_path.unlink()
+        live_proc.reload_polygon()
+        log_audit("POLYGON_CLEAR", username=_admin())
+        return jsonify(ok=True, count=0)
+
+    if not isinstance(points, list) or len(points) < 4:
+        return jsonify(ok=False, error="Need at least 4 points"), 400
+
+    try:
+        normalized = []
+        for p in points:
+            if not isinstance(p, (list, tuple)) or len(p) != 2:
+                return jsonify(ok=False, error="Invalid point format"), 400
+            normalized.append([int(p[0]), int(p[1])])
+    except Exception:
+        return jsonify(ok=False, error="Polygon points must be numeric"), 400
+
+    polygon_path.write_text(json.dumps(normalized))
+    live_proc.reload_polygon()
+    log_audit("POLYGON_SAVE", target=f"{len(normalized)} pts", username=_admin())
+    return jsonify(ok=True, count=len(normalized))
+
+
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0", port=5000)
+    app.run(debug=True, host="0.0.0.0", port=5000, threaded=True)

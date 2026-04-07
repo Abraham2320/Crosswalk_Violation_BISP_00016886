@@ -74,6 +74,7 @@ class CameraStream:
         self._cap:    Optional[cv2.VideoCapture] = None
         self._frame:  Optional[np.ndarray] = None
         self._jpeg:   bytes = _PLACEHOLDER
+        self._annotated_jpeg: Optional[bytes] = None
         self._lock    = threading.Lock()
         self._running = False
         self._thread: Optional[threading.Thread] = None
@@ -95,13 +96,13 @@ class CameraStream:
         # Numeric string → int index
         src = int(source) if str(source).isdigit() else source
 
-        cap = cv2.VideoCapture(src)
-        if not cap.isOpened():
-            cap.release()
-            self.error = f"Cannot open source: {source}"
+        cap, used_source = self._open_with_fallback(src)
+        if cap is None:
+            self.error = f"Cannot open usable source: {source}"
             return False
 
         self._cap     = cap
+        self.source   = str(used_source)
         self.connected = True
         self.fps      = cap.get(cv2.CAP_PROP_FPS) or 25.0
         self.width    = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
@@ -110,6 +111,63 @@ class CameraStream:
         self._thread  = threading.Thread(target=self._capture_loop, daemon=True)
         self._thread.start()
         return True
+
+    def _open_with_fallback(self, src: str | int) -> tuple[Optional[cv2.VideoCapture], str | int]:
+        """
+        Open source and verify the first frame is usable.
+        On Windows, some camera indexes open successfully but return near-black frames.
+        Falls back to the demo video file when all camera indexes fail.
+        """
+        candidates: list[tuple[str | int, Optional[int]]] = []
+
+        # Primary candidate
+        candidates.append((src, None))
+
+        # Windows-specific backend fallbacks for camera indexes.
+        if isinstance(src, int):
+            candidates.append((src, cv2.CAP_DSHOW))
+            candidates.append((src, cv2.CAP_MSMF))
+            # If selected index is black/unusable, try common webcam indexes.
+            for alt in (0, 1):
+                if alt != src:
+                    candidates.append((alt, cv2.CAP_DSHOW))
+                    candidates.append((alt, cv2.CAP_MSMF))
+                    candidates.append((alt, None))
+
+        # Final fallback: demo video file (works even without any camera attached)
+        import os as _os
+        _demo = _os.getenv("DEMO_VIDEO_SOURCE", "Videos/v2.mp4")
+        if isinstance(src, int) and _demo:
+            candidates.append((_demo, None))
+
+        for candidate_src, backend in candidates:
+            cap = cv2.VideoCapture(candidate_src) if backend is None else cv2.VideoCapture(candidate_src, backend)
+            if not cap.isOpened():
+                cap.release()
+                continue
+
+            ok, frame = cap.read()
+            if not ok or frame is None:
+                cap.release()
+                continue
+
+            if self._is_near_black(frame):
+                cap.release()
+                continue
+
+            return cap, candidate_src
+
+        return None, src
+
+    @staticmethod
+    def _is_near_black(frame: np.ndarray) -> bool:
+        """Heuristic: reject likely-empty/black frames returned by bad camera backends."""
+        if frame is None or frame.size == 0:
+            return True
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        mean = float(gray.mean())
+        std = float(gray.std())
+        return mean < 6.0 and std < 22.0
 
     def stop(self) -> None:
         self._running  = False
@@ -121,10 +179,20 @@ class CameraStream:
             self._jpeg  = _PLACEHOLDER
             self._frame = None
 
-    def get_jpeg(self) -> bytes:
-        """Return the latest frame as a JPEG bytes object (thread-safe)."""
+    def set_annotated_jpeg(self, jpeg: bytes) -> None:
+        """Called by live_processor to replace the raw stream with an annotated frame."""
         with self._lock:
-            return self._jpeg
+            self._annotated_jpeg = jpeg
+
+    def clear_annotated(self) -> None:
+        """Stop serving annotated frames (revert to raw stream)."""
+        with self._lock:
+            self._annotated_jpeg = None
+
+    def get_jpeg(self) -> bytes:
+        """Return the latest annotated frame if available, otherwise the raw frame."""
+        with self._lock:
+            return self._annotated_jpeg if self._annotated_jpeg is not None else self._jpeg
 
     def get_numpy(self) -> Optional[np.ndarray]:
         """Return the latest raw numpy frame (thread-safe copy)."""
@@ -143,12 +211,28 @@ class CameraStream:
 
     # ── Background thread ─────────────────────────────────────────────────────
 
+    @staticmethod
+    def _is_local_video_file(source: str) -> bool:
+        """Return True if source is a local file path (not a camera index or network URL)."""
+        s = str(source).strip()
+        if s.isdigit():
+            return False
+        if s.startswith(("rtsp://", "http://", "https://", "mjpeg://")):
+            return False
+        return Path(s).suffix.lower() in {".mp4", ".avi", ".mkv", ".mov", ".ts", ".m4v", ".wmv"}
+
     def _capture_loop(self) -> None:
+        is_video_file = self._is_local_video_file(self.source)
         target_interval = 1.0 / max(self.fps, 1.0)
         while self._running and self._cap is not None:
             t0  = time.monotonic()
             ret, frame = self._cap.read()
             if not ret:
+                if is_video_file:
+                    # Loop the video: seek back to the first frame and continue
+                    self._cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                    continue
+                # Real camera/stream disconnected
                 self.connected = False
                 self.error = "Stream ended or connection lost."
                 with self._lock:

@@ -4,175 +4,147 @@
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
 <style>
-  .live-grid {
-    display: grid;
-    grid-template-columns: 1fr 380px;
-    gap: 20px;
-    align-items: start;
-  }
-  @media (max-width: 1100px) { .live-grid { grid-template-columns: 1fr; } }
+/* ── Layout ─────────────────────────────────────────────────────────────── */
+.live-grid {
+  display: grid;
+  grid-template-columns: 1fr 380px;
+  gap: 20px;
+  align-items: start;
+}
+@media (max-width: 1100px) { .live-grid { grid-template-columns: 1fr; } }
 
-  .video-wrap {
-    position: relative;
-    background: #000;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
-    overflow: hidden;
-    aspect-ratio: 16/9;
-  }
-  .video-wrap img {
-    width: 100%;
-    height: 100%;
-    object-fit: contain;
-    display: block;
-  }
+/* ── Video container ─────────────────────────────────────────────────────── */
+.video-wrap {
+  position: relative;
+  background: #000;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  aspect-ratio: 16/9;
+}
+.video-wrap img {
+  width: 100%; height: 100%;
+  object-fit: contain;
+  display: block;
+}
+#zone-canvas {
+  position: absolute; top: 0; left: 0;
+  width: 100%; height: 100%;
+  pointer-events: none;
+  z-index: 1;
+}
+#zone-canvas.edit-mode {
+  pointer-events: auto;
+  cursor: crosshair;
+  z-index: 3;
+}
 
-  /* Camera overlay badges */
-  .video-overlay {
-    position: absolute;
-    top: 12px; left: 12px;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    pointer-events: none;
-  }
-  .overlay-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    font-family: var(--font-mono);
-    font-size: 11px;
-    background: rgba(10,10,15,0.8);
-    border: 1px solid var(--border);
-    padding: 3px 8px;
-    border-radius: 2px;
-    backdrop-filter: blur(4px);
-  }
-  .overlay-badge.online  { border-color: rgba(16,185,129,0.5); color: var(--accent-green); }
-  .overlay-badge.offline { border-color: rgba(239,68,68,0.4);  color: var(--accent-red); }
+/* ── Overlay badges ──────────────────────────────────────────────────────── */
+.video-overlay {
+  position: absolute; top: 12px; left: 12px;
+  display: flex; flex-direction: column; gap: 6px;
+  pointer-events: none; z-index: 2;
+}
+.overlay-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-family: var(--font-mono); font-size: 11px;
+  background: rgba(10,10,15,0.8); border: 1px solid var(--border);
+  padding: 3px 8px; border-radius: 2px; backdrop-filter: blur(4px);
+}
+.overlay-badge.online  { border-color: rgba(16,185,129,0.5); color: var(--accent-green); }
+.overlay-badge.offline { border-color: rgba(239,68,68,0.4);  color: var(--accent-red); }
+.overlay-badge.detecting { border-color: rgba(245,158,11,0.6); color: var(--accent-amber); }
 
-  /* Alert banner */
-  @keyframes alertFlash {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.5; }
-  }
-  .violation-alert {
-    display: none;
-    position: absolute;
-    bottom: 0; left: 0; right: 0;
-    background: rgba(239,68,68,0.85);
-    padding: 10px 16px;
-    font-family: var(--font-mono);
-    font-size: 13px;
-    font-weight: 500;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    text-align: center;
-    animation: alertFlash 1s ease-in-out infinite;
-  }
-  .violation-alert.visible { display: block; }
+/* ── Violation alert ────────────────────────────────────────────────────── */
+@keyframes alertFlash { 0%,100%{opacity:1} 50%{opacity:0.5} }
+.violation-alert {
+  display: none; position: absolute; bottom: 0; left: 0; right: 0;
+  background: rgba(239,68,68,0.85); padding: 10px 16px;
+  font-family: var(--font-mono); font-size: 13px; font-weight: 500;
+  letter-spacing: 0.06em; text-transform: uppercase; text-align: center;
+  animation: alertFlash 1s ease-in-out infinite; z-index: 4;
+}
+.violation-alert.visible { display: block; }
 
-  /* Camera control card */
-  .camera-control { padding: 20px; }
-  .source-row { display: flex; gap: 8px; }
-  .source-row .input { flex: 1; }
+/* ── Stats rows ─────────────────────────────────────────────────────────── */
+.live-stats {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 12px; margin-bottom: 12px;
+}
+.det-stats {
+  grid-template-columns: repeat(5, 1fr);
+  margin-top: 10px;
+}
+.sys-stats {
+  grid-template-columns: repeat(5, 1fr);
+  margin-top: 10px;
+}
+.mini-stat {
+  background: var(--bg-elevated); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 10px; text-align: center;
+}
+.mini-stat.active { border-color: rgba(245,158,11,0.4); }
+.mini-stat-value {
+  font-family: var(--font-mono); font-size: 20px;
+  color: var(--accent-amber); line-height: 1;
+}
+.mini-stat-label {
+  font-family: var(--font-display); font-size: 10px;
+  letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--text-muted); margin-top: 4px;
+}
+.mini-stat-value.ok { color: var(--accent-green); }
+.mini-stat-value.fail { color: var(--accent-red); }
 
-  /* Violation log */
-  .log-wrap {
-    max-height: 360px;
-    overflow-y: auto;
-    scrollbar-width: thin;
-    scrollbar-color: var(--border) transparent;
-  }
-  .log-entry {
-    display: flex;
-    align-items: flex-start;
-    gap: 10px;
-    padding: 10px 0;
-    border-bottom: 1px solid rgba(31,41,55,0.5);
-  }
-  .log-entry:last-child { border-bottom: none; }
-  .log-dot {
-    width: 8px; height: 8px;
-    border-radius: 50%;
-    margin-top: 4px;
-    flex-shrink: 0;
-  }
-  .log-dot.high { background: var(--accent-red); }
-  .log-dot.low  { background: var(--accent-amber); }
-  .log-text { flex: 1; }
-  .log-plate {
-    font-family: var(--font-mono);
-    font-size: 13px;
-    color: var(--accent-amber);
-  }
-  .log-meta {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    color: var(--text-muted);
-    margin-top: 2px;
-  }
-  .log-link {
-    font-size: 11px;
-    color: var(--text-muted);
-    text-decoration: none;
-    margin-left: auto;
-    flex-shrink: 0;
-    align-self: center;
-  }
-  .log-link:hover { color: var(--accent-amber); }
+/* ── Control buttons row ────────────────────────────────────────────────── */
+.ctrl-bar {
+  display: flex; gap: 8px; flex-wrap: wrap;
+  align-items: center; margin-bottom: 12px;
+}
 
-  /* Stats row */
-  .live-stats {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 12px;
-    margin-bottom: 16px;
-  }
-  .mini-stat {
-    background: var(--bg-elevated);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 12px;
-    text-align: center;
-  }
-  .mini-stat-value {
-    font-family: var(--font-mono);
-    font-size: 20px;
-    color: var(--accent-amber);
-    line-height: 1;
-  }
-  .mini-stat-label {
-    font-family: var(--font-display);
-    font-size: 10px;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--text-muted);
-    margin-top: 4px;
-  }
+/* ── Camera source card ─────────────────────────────────────────────────── */
+.camera-control { padding: 18px; }
+.source-row { display: flex; gap: 8px; }
+.source-row .input { flex: 1; }
+.source-presets { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.preset-btn {
+  font-family: var(--font-mono); font-size: 11px;
+  padding: 4px 10px; border: 1px solid var(--border);
+  border-radius: var(--radius); background: transparent;
+  color: var(--text-muted); cursor: pointer; transition: all var(--transition);
+}
+.preset-btn:hover { border-color: var(--accent-amber); color: var(--accent-amber); }
 
-  /* Quick-source buttons */
-  .source-presets {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    margin-top: 8px;
-  }
-  .preset-btn {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    padding: 4px 10px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    background: transparent;
-    color: var(--text-muted);
-    cursor: pointer;
-    transition: all var(--transition);
-  }
-  .preset-btn:hover {
-    border-color: var(--accent-amber);
-    color: var(--accent-amber);
-  }
+/* ── Violation log ──────────────────────────────────────────────────────── */
+.log-wrap {
+  max-height: 340px; overflow-y: auto;
+  scrollbar-width: thin; scrollbar-color: var(--border) transparent;
+}
+.log-entry {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 9px 0; border-bottom: 1px solid rgba(31,41,55,0.5);
+}
+.log-entry:last-child { border-bottom: none; }
+.log-dot { width:8px; height:8px; border-radius:50%; margin-top:4px; flex-shrink:0; }
+.log-dot.high { background: var(--accent-red); }
+.log-dot.low  { background: var(--accent-amber); }
+.log-text { flex:1; }
+.log-plate { font-family:var(--font-mono); font-size:13px; color:var(--accent-amber); }
+.log-meta  { font-family:var(--font-mono); font-size:11px; color:var(--text-muted); margin-top:2px; }
+.log-link  {
+  font-size:11px; color:var(--text-muted); text-decoration:none;
+  margin-left:auto; flex-shrink:0; align-self:center;
+}
+.log-link:hover { color:var(--accent-amber); }
+
+/* ── Polygon editor panel ───────────────────────────────────────────────── */
+.poly-panel {
+  background: var(--bg-elevated); border: 1px solid rgba(245,158,11,0.3);
+  border-radius: var(--radius); padding: 14px; margin-top: 12px;
+  font-family: var(--font-mono); font-size: 12px;
+}
+.poly-hint { color: var(--text-muted); margin-bottom:10px; line-height:1.6; }
+.poly-hint strong { color: var(--accent-amber); }
 </style>
 {% endblock %}
 
@@ -182,7 +154,7 @@
   <div class="page-header" style="display:flex; align-items:center; justify-content:space-between;">
     <div>
       <div class="page-title">Live Stream</div>
-      <div class="page-subtitle">Real-time crosswalk monitoring</div>
+      <div class="page-subtitle">Real-time crosswalk monitoring &amp; violation detection</div>
     </div>
     <div class="live-indicator" id="sys-indicator">
       <div class="live-dot"></div>
@@ -192,10 +164,10 @@
 
   <div class="live-grid">
 
-    <!-- ── Left: video feed ──────────────────────────────────── -->
+    <!-- ── Left: video + controls ───────────────────────────────────── -->
     <div>
 
-      <!-- Stats row above video -->
+      <!-- Totals stats row -->
       <div class="live-stats">
         <div class="mini-stat">
           <div class="mini-stat-value" id="ls-total">—</div>
@@ -213,50 +185,168 @@
         </div>
       </div>
 
-      <!-- Video container -->
-      <div class="video-wrap">
+      <div class="live-stats sys-stats">
+        <div class="mini-stat">
+          <div class="mini-stat-value" id="chk-yolo">—</div>
+          <div class="mini-stat-label">YOLO</div>
+        </div>
+        <div class="mini-stat">
+          <div class="mini-stat-value" id="chk-cv">—</div>
+          <div class="mini-stat-label">OpenCV</div>
+        </div>
+        <div class="mini-stat">
+          <div class="mini-stat-value" id="chk-orb">—</div>
+          <div class="mini-stat-label">ORB</div>
+        </div>
+        <div class="mini-stat">
+          <div class="mini-stat-value" id="chk-fsm">—</div>
+          <div class="mini-stat-label">FSM/Rules</div>
+        </div>
+        <div class="mini-stat">
+          <div class="mini-stat-value" id="chk-pipe">—</div>
+          <div class="mini-stat-label">Pipeline</div>
+        </div>
+      </div>
+
+      <!-- Detection control bar -->
+      <div class="ctrl-bar">
+        <button id="btn-det-start" class="btn-primary btn-sm"
+                onclick="startDetection()">
+          ▶ Start Detection
+        </button>
+        <button id="btn-det-stop" class="btn-danger btn-sm"
+                onclick="stopDetection()" style="display:none;">
+          ■ Stop Detection
+        </button>
+        <button id="btn-poly-edit" class="btn-ghost btn-sm"
+                onclick="enterEditMode()">
+          ◈ Draw Polygon
+        </button>
+        <button id="btn-poly-save" class="btn-ghost btn-sm"
+                onclick="savePolygon()"
+                style="display:none; border-color:var(--accent-green); color:var(--accent-green);">
+          ✓ Save Zone
+        </button>
+        <button id="btn-poly-undo" class="btn-ghost btn-sm"
+                onclick="undoPoint()" style="display:none;">
+          ↩ Undo
+        </button>
+        <button id="btn-poly-cancel" class="btn-ghost btn-sm"
+                onclick="exitEditMode()" style="display:none;">
+          ✕ Cancel
+        </button>
+        <button id="btn-poly-freeze" class="btn-ghost btn-sm"
+                onclick="freezeFrame()"
+                style="display:none; border-color:rgba(99,179,237,0.5); color:#63b3ed;">
+          ⊙ Re-freeze Frame
+        </button>
+        <button id="btn-poly-clear" class="btn-ghost btn-sm"
+                onclick="clearPolygon()"
+                style="border-color:rgba(239,68,68,0.4); color:var(--accent-red);">
+          ⊘ Clear Zone
+        </button>
+        <button id="btn-demo-video" class="btn-ghost btn-sm"
+                onclick="loadTestVideo()"
+                style="border-color:rgba(16,185,129,0.45); color:var(--accent-green);">
+          ▶ Test Video
+        </button>
+      </div>
+
+      <!-- Video container with canvas overlay -->
+      <div class="video-wrap" id="video-wrap">
         <img id="live-img"
              src="{{ url_for('admin_live_feed') }}"
-             alt="Live camera feed"
-             onerror="this.src='/static/img/no-signal.jpg'">
+             data-frame-width="{{ camera_status.width or 1280 }}"
+             data-frame-height="{{ camera_status.height or 720 }}"
+             alt="Live camera feed">
 
-        <!-- Overlay badges -->
+        <!-- Polygon canvas overlay -->
+        <canvas id="zone-canvas"></canvas>
+
+        <!-- Camera + detection badges -->
         <div class="video-overlay">
           <span class="overlay-badge {% if camera_status.connected %}online{% else %}offline{% endif %}"
                 id="cam-badge">
-            <span id="cam-dot" style="width:6px;height:6px;border-radius:50%;
-              background:{% if camera_status.connected %}var(--accent-green){% else %}var(--accent-red){% endif %};">
+            <span id="cam-dot"
+                  style="width:6px;height:6px;border-radius:50%;
+                  background:{% if camera_status.connected %}var(--accent-green){% else %}var(--accent-red){% endif %};">
             </span>
             <span id="cam-status-text">
               {% if camera_status.connected %}LIVE · {{ camera_status.width }}×{{ camera_status.height }}{% else %}OFFLINE{% endif %}
             </span>
           </span>
-          {% if camera_status.source %}
-          <span class="overlay-badge" style="color:var(--text-muted);" id="source-badge">
-            {{ camera_status.source[:36] }}
+          <span class="overlay-badge" id="det-badge" style="display:none;">
+            <span style="width:6px;height:6px;border-radius:50%;background:var(--accent-amber);
+                         animation:alertFlash 1.5s infinite;"></span>
+            <span>DETECTING</span>
           </span>
-          {% endif %}
+          <span class="overlay-badge" style="color:var(--text-muted); {% if not camera_status.source %}display:none;{% endif %}"
+                id="source-badge">
+            {% if camera_status.source %}{{ camera_status.source[:36] }}{% endif %}
+          </span>
         </div>
 
-        <!-- Violation alert banner -->
+        <!-- Active violation banner -->
         <div class="violation-alert" id="violation-alert">
           ⚠ ACTIVE VIOLATION DETECTED
         </div>
       </div>
 
-      <!-- Camera error message -->
+      <!-- Camera error -->
       <div id="cam-error" style="display:none; margin-top:8px;">
         <div class="alert alert-error" id="cam-error-text"></div>
       </div>
 
-      <!-- Camera connect form -->
-      <div class="card camera-control" style="margin-top:16px;">
-        <div class="card-title">Camera Source</div>
+      <!-- Edit-mode polygon panel -->
+      <div class="poly-panel" id="poly-panel" style="display:none;">
+        <div class="poly-hint">
+          <strong>Calibration mode active.</strong> The stream is frozen — click the exact
+          crosswalk corners on the still frame.<br>
+          Use <strong>Undo</strong> to remove the last point, <strong>Save Zone</strong> when
+          done, or <strong>Cancel</strong> to discard.<br>
+          <span style="color:#63b3ed;">⊙ Re-freeze Frame</span>
+          <span style="color:var(--text-muted);"> grabs a fresh snapshot if the scene moved.</span>
+        </div>
+        <div style="font-family:var(--font-mono); font-size:11px; color:var(--text-muted); margin-bottom:4px;"
+             id="poly-freeze-status">Freezing frame…</div>
+        <div style="font-family:var(--font-mono); font-size:11px; color:var(--text-muted);"
+             id="poly-point-count">Points: 0</div>
+      </div>
 
+      <!-- Detection live stats (shown when detection active) -->
+      <div id="det-stats-wrap" style="display:none;">
+        <div class="live-stats det-stats" style="margin-top:10px;">
+          <div class="mini-stat active">
+            <div class="mini-stat-value" id="ds-ped">0</div>
+            <div class="mini-stat-label">Pedestrians</div>
+          </div>
+          <div class="mini-stat active">
+            <div class="mini-stat-value" id="ds-veh">0</div>
+            <div class="mini-stat-label">Vehicles</div>
+          </div>
+          <div class="mini-stat active">
+            <div class="mini-stat-value" id="ds-ped-zone" style="color:var(--accent-green);">0</div>
+            <div class="mini-stat-label">P in Zone</div>
+          </div>
+          <div class="mini-stat active">
+            <div class="mini-stat-value" id="ds-veh-zone" style="color:var(--accent-green);">0</div>
+            <div class="mini-stat-label">V in Zone</div>
+          </div>
+          <div class="mini-stat active">
+            <div class="mini-stat-value" id="ds-violations" style="color:var(--accent-red);">0</div>
+            <div class="mini-stat-label">This Session</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Camera source card -->
+      <div class="card camera-control" style="margin-top:14px;">
+        <div class="card-title">Camera Source</div>
         <div class="source-row">
           <input class="input" type="text" id="cam-source"
                  value="{{ default_source }}"
-                 placeholder="0  or  rtsp://admin:pass@192.168.1.64:554/stream1">
+               data-demo-source="{{ demo_source }}"
+                 placeholder="0  or  rtsp://…  or  http://192.168.1.x:8080/video">
           <button class="btn-primary btn-sm" id="btn-connect"
                   onclick="connectCamera()">Connect</button>
           <button class="btn-ghost btn-sm" id="btn-disconnect"
@@ -265,80 +355,72 @@
             Disconnect
           </button>
         </div>
-
-        <!-- Quick-source presets -->
         <div class="source-presets">
-          <span style="font-family:var(--font-mono); font-size:10px; color:var(--text-muted);
-                       align-self:center;">Quick:</span>
+          <span style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted);align-self:center;">
+            Quick:
+          </span>
           <button class="preset-btn" onclick="setSource('0')">Webcam 0</button>
           <button class="preset-btn" onclick="setSource('1')">Webcam 1</button>
+          <button class="preset-btn" onclick="setSource('2')">Webcam 2</button>
           <button class="preset-btn"
-                  onclick="setSource('rtsp://admin:PASSWORD@192.168.1.64:554/Streaming/Channels/101')">
-            Hikvision RTSP
+                  onclick="setSource('http://192.168.1.3:4747/mjpegfeed')">
+            DroidCam
           </button>
           <button class="preset-btn"
-                  onclick="setSource('rtsp://admin:PASSWORD@192.168.1.64:554/h264Preview_01_main')">
-            Reolink RTSP
+                  onclick="setSource('http://192.168.1.3:8080/video')">
+            IP Webcam
+          </button>
+          <button class="preset-btn"
+                  onclick="setSource('rtsp://admin:PASSWORD@192.168.1.64:554/Streaming/Channels/101')">
+            Hikvision
           </button>
           <button class="preset-btn" onclick="setSource('Videos/v2.mp4')">
             Demo Video
           </button>
         </div>
 
-        <!-- Connection guide -->
         <details style="margin-top:14px;">
-          <summary style="font-family:var(--font-display); font-size:12px;
-                          color:var(--text-muted); cursor:pointer; user-select:none;
-                          letter-spacing:0.06em; text-transform:uppercase;">
+          <summary style="font-family:var(--font-display);font-size:12px;color:var(--text-muted);
+                          cursor:pointer;letter-spacing:0.06em;text-transform:uppercase;">
             Camera Connection Guide
           </summary>
-          <div style="margin-top:12px; font-family:var(--font-mono); font-size:11px;
-                      color:var(--text-muted); line-height:2;">
-            <strong style="color:var(--accent-amber);">OFFLINE (USB / built-in webcam)</strong><br>
-            &nbsp;&nbsp;Source: <code style="color:var(--text-primary);">0</code> — first camera<br>
-            &nbsp;&nbsp;Source: <code style="color:var(--text-primary);">1</code>, <code>2</code> … — additional cameras<br>
+          <div style="margin-top:12px;font-family:var(--font-mono);font-size:11px;
+                      color:var(--text-muted);line-height:2;">
+            <strong style="color:var(--accent-amber);">PHONE — IP Webcam (Android, free)</strong><br>
+            &nbsp;&nbsp;Install IP Webcam → Start server → use <code style="color:var(--text-primary);">http://PHONE_IP:8080/video</code><br>
             <br>
-            <strong style="color:var(--accent-amber);">ONLINE — Hikvision / Dahua (RTSP)</strong><br>
-            &nbsp;&nbsp;<code style="color:var(--text-primary);">rtsp://admin:PASSWORD@CAMERA_IP:554/Streaming/Channels/101</code><br>
+            <strong style="color:var(--accent-amber);">PHONE — DroidCam (free tier)</strong><br>
+            &nbsp;&nbsp;<code style="color:var(--text-primary);">http://PHONE_IP:4747/mjpegfeed</code><br>
             <br>
-            <strong style="color:var(--accent-amber);">ONLINE — Reolink / TP-Link Tapo</strong><br>
-            &nbsp;&nbsp;<code style="color:var(--text-primary);">rtsp://admin:PASSWORD@CAMERA_IP:554/h264Preview_01_main</code><br>
+            <strong style="color:var(--accent-amber);">REMOTE — ngrok tunnel</strong><br>
+            &nbsp;&nbsp;Run: <code style="color:var(--text-primary);">ngrok http PHONE_IP:8080</code> → use the https URL<br>
             <br>
-            <strong style="color:var(--accent-amber);">ONLINE — Generic ONVIF</strong><br>
-            &nbsp;&nbsp;<code style="color:var(--text-primary);">rtsp://USER:PASS@CAMERA_IP:554/stream1</code><br>
+            <strong style="color:var(--accent-amber);">ONLINE — Hikvision / Dahua</strong><br>
+            &nbsp;&nbsp;<code style="color:var(--text-primary);">rtsp://admin:PASS@CAMERA_IP:554/Streaming/Channels/101</code><br>
             <br>
-            <strong style="color:var(--accent-amber);">ONLINE — HTTP MJPEG</strong><br>
-            &nbsp;&nbsp;<code style="color:var(--text-primary);">http://CAMERA_IP:8080/video</code><br>
-            <br>
-            <span style="color:var(--text-muted);">
-              Tip: Test your RTSP URL with VLC → Media → Open Network Stream first.<br>
-              Set CAMERA_SOURCE in your .env file to persist the setting across restarts.
-            </span>
+            <span style="color:var(--text-muted);">Tip: test RTSP URLs in VLC → Media → Open Network Stream first.</span>
           </div>
         </details>
       </div>
 
     </div>
 
-    <!-- ── Right: violation log ───────────────────────────────── -->
+    <!-- ── Right: violation log ──────────────────────────────────────── -->
     <div>
       <div class="card" style="padding:20px;">
-        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
           <div class="card-title" style="margin-bottom:0;">Violation Log</div>
-          <span style="font-family:var(--font-mono); font-size:10px; color:var(--text-muted);">
+          <span style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted);">
             Auto-refresh 3s
           </span>
         </div>
-
         <div class="log-wrap" id="violation-log">
-          <div style="text-align:center; padding:32px; color:var(--text-muted);
-                      font-size:13px; font-family:var(--font-mono);">
-            Loading…
-          </div>
+          <div style="text-align:center;padding:32px;color:var(--text-muted);
+                      font-size:13px;font-family:var(--font-mono);">Loading…</div>
         </div>
-
-        <div style="margin-top:14px; padding-top:14px; border-top:1px solid var(--border);">
-          <a href="{{ url_for('admin_violations') }}" class="btn-ghost btn-sm" style="width:100%; justify-content:center;">
+        <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border);">
+          <a href="{{ url_for('admin_violations') }}"
+             class="btn-ghost btn-sm" style="width:100%;justify-content:center;">
             View Full Log
           </a>
         </div>
@@ -353,53 +435,418 @@
 <script>
 "use strict";
 
-/* ── Camera controls ──────────────────────────────────────── */
+/* ═══════════════════════════════════════════════════════════════
+   STATE
+═══════════════════════════════════════════════════════════════ */
+let editMode      = false;
+let polygonPoints = [];   // frame-coordinate points [[x,y], ...]
+let frameW = parseInt(document.getElementById("live-img").dataset.frameWidth)  || 1280;
+let frameH = parseInt(document.getElementById("live-img").dataset.frameHeight) || 720;
+let detectionActive = false;
+let _lastViolationId = null;
+let _detPollInterval = null;
+let _frozenFrame = null;   // HTMLImageElement while calibration mode active
 
-function setSource(val) {
-  document.getElementById("cam-source").value = val;
+const canvas = document.getElementById("zone-canvas");
+const ctx    = canvas.getContext("2d");
+
+/* ═══════════════════════════════════════════════════════════════
+   CANVAS SIZING
+═══════════════════════════════════════════════════════════════ */
+function syncCanvas() {
+  const img = document.getElementById("live-img");
+  const w = img.clientWidth  || 640;
+  const h = img.clientHeight || 360;
+  // Only reassign dimensions when they actually change — assigning canvas.width/height
+  // always clears the canvas even when the value is identical.
+  if (canvas.width !== w || canvas.height !== h) {
+    canvas.width  = w;
+    canvas.height = h;
+  }
+  redrawCanvas();
 }
+
+new ResizeObserver(syncCanvas).observe(document.getElementById("video-wrap"));
+window.addEventListener("load", syncCanvas);
+
+/* ═══════════════════════════════════════════════════════════════
+   CANVAS DRAWING
+═══════════════════════════════════════════════════════════════ */
+function toCanvas(pt) {
+  return [pt[0] * canvas.width / frameW, pt[1] * canvas.height / frameH];
+}
+
+function redrawCanvas() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Draw frozen calibration frame as canvas background
+  if (_frozenFrame) {
+    ctx.drawImage(_frozenFrame, 0, 0, canvas.width, canvas.height);
+  }
+
+  // Always draw vertex dots for any points we have (even just 1)
+  polygonPoints.forEach((pt, i) => {
+    const [cx, cy] = toCanvas(pt);
+    ctx.beginPath();
+    ctx.arc(cx, cy, editMode ? 7 : 4, 0, Math.PI * 2);
+    ctx.fillStyle = i === 0 ? "#10B981" : "#F59E0B";
+    ctx.fill();
+    // White ring so dots are visible on any background
+    ctx.strokeStyle = "#fff";
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    if (editMode) {
+      ctx.fillStyle = "#fff";
+      ctx.font = "bold 11px monospace";
+      ctx.fillText(i + 1, cx + 9, cy - 5);
+    }
+  });
+
+  // Draw connecting lines only when ≥2 points
+  if (polygonPoints.length >= 2) {
+    ctx.beginPath();
+    const [sx, sy] = toCanvas(polygonPoints[0]);
+    ctx.moveTo(sx, sy);
+    for (let i = 1; i < polygonPoints.length; i++) {
+      const [cx2, cy2] = toCanvas(polygonPoints[i]);
+      ctx.lineTo(cx2, cy2);
+    }
+    if (!editMode) ctx.closePath();
+    ctx.strokeStyle = "#F59E0B";
+    ctx.lineWidth   = 2;
+    ctx.stroke();
+    // Fill only when closed (non-edit) or when ≥4 points ready to save
+    if (!editMode || polygonPoints.length >= 4) {
+      if (!editMode) {
+        ctx.fillStyle = "rgba(245,158,11,0.12)";
+        ctx.fill();
+      }
+    }
+  }
+
+  if (editMode) {
+    const count = polygonPoints.length;
+    document.getElementById("poly-point-count").textContent =
+      `Points: ${count}` + (count >= 4 ? " ✓ ready to save" : " (need ≥4)");
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   CANVAS CLICK (polygon editing)
+═══════════════════════════════════════════════════════════════ */
+canvas.addEventListener("click", (e) => {
+  if (!editMode) return;
+  const rect = canvas.getBoundingClientRect();
+  const dx = e.clientX - rect.left;
+  const dy = e.clientY - rect.top;
+  const fx = Math.round(dx * frameW / canvas.width);
+  const fy = Math.round(dy * frameH / canvas.height);
+  polygonPoints.push([fx, fy]);
+  redrawCanvas();
+});
+
+/* ═══════════════════════════════════════════════════════════════
+   POLYGON EDITOR CONTROLS
+═══════════════════════════════════════════════════════════════ */
+async function enterEditMode() {
+  if (editMode) return;   // prevent double-invocation
+  editMode = true;
+  // Start a fresh polygon so stale/invalid saved points do not anchor to corners.
+  polygonPoints = [];
+  _frozenFrame = null;
+  // Restore opacity — detection mode sets canvas opacity:0
+  canvas.style.opacity = "1";
+  // canvas.classList.add("edit-mode") is deferred until freeze completes
+  // so pointer-events stay none during the network fetch (prevents ghost clicks)
+  document.getElementById("poly-panel").style.display = "";
+  document.getElementById("btn-poly-edit").style.display   = "none";
+  document.getElementById("btn-poly-save").style.display   = "";
+  document.getElementById("btn-poly-undo").style.display   = "";
+  document.getElementById("btn-poly-cancel").style.display = "";
+  document.getElementById("btn-poly-freeze").style.display = "";
+  redrawCanvas();
+  // Freeze current frame, THEN enable canvas clicks
+  await freezeFrame();
+  canvas.classList.add("edit-mode");
+}
+
+async function freezeFrame() {
+  const statusEl = document.getElementById("poly-freeze-status");
+  try {
+    if (statusEl) statusEl.textContent = "Freezing frame…";
+    const r = await fetch("{{ url_for('admin_live_snapshot') }}");
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const blob = await r.blob();
+    const url  = URL.createObjectURL(blob);
+    await new Promise((resolve, reject) => {
+      const img  = new Image();
+      img.onload = () => {
+        // Release previous frozen frame URL
+        if (_frozenFrame && _frozenFrame._objectUrl) {
+          URL.revokeObjectURL(_frozenFrame._objectUrl);
+        }
+        img._objectUrl = url;
+        _frozenFrame = img;
+        // Don't hide live-img — canvas drawImage covers it; hiding it risks black screen
+        redrawCanvas();
+        if (statusEl) statusEl.textContent = "Frame frozen — click to place points.";
+        resolve();
+      };
+      img.onerror = reject;
+      img.src = url;
+    });
+  } catch(e) {
+    if (statusEl) statusEl.textContent = "Could not freeze frame — drawing on live stream.";
+  }
+}
+
+function releaseFrame() {
+  if (_frozenFrame) {
+    if (_frozenFrame._objectUrl) URL.revokeObjectURL(_frozenFrame._objectUrl);
+    _frozenFrame = null;
+  }
+}
+
+function exitEditMode() {
+  editMode = false;
+  releaseFrame();
+  canvas.classList.remove("edit-mode");
+  // If detection is active, hide canvas again (OpenCV draws overlays on the stream)
+  if (detectionActive) canvas.style.opacity = "0";
+  document.getElementById("poly-panel").style.display = "none";
+  document.getElementById("btn-poly-edit").style.display   = "";
+  document.getElementById("btn-poly-save").style.display   = "none";
+  document.getElementById("btn-poly-undo").style.display   = "none";
+  document.getElementById("btn-poly-cancel").style.display = "none";
+  document.getElementById("btn-poly-freeze").style.display = "none";
+  // Reload saved polygon from server to discard unsaved edits
+  loadPolygon();
+}
+
+function undoPoint() {
+  polygonPoints.pop();
+  redrawCanvas();
+}
+
+async function savePolygon() {
+  if (polygonPoints.length < 4) {
+    alert("Add at least 4 points to define the crosswalk zone.");
+    return;
+  }
+  const btn = document.getElementById("btn-poly-save");
+  btn.textContent = "Saving…";
+  btn.disabled = true;
+  try {
+    const r = await fetch("{{ url_for('admin_live_polygon_save') }}", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ points: polygonPoints }),
+    });
+    const d = await r.json();
+    if (d.ok) {
+      showToast(`Zone saved — ${d.count} points.`);
+      exitEditMode();
+    } else {
+      alert("Save failed: " + (d.error || "unknown error"));
+    }
+  } finally {
+    btn.textContent = "✓ Save Zone";
+    btn.disabled = false;
+  }
+}
+
+async function clearPolygon() {
+  if (!confirm("Clear the saved crosswalk zone? Detection will lose its reference polygon.")) return;
+  const r = await fetch("{{ url_for('admin_live_polygon_save') }}", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ points: [] }),
+  });
+  if (!r.ok) {
+    const d = await r.json().catch(() => ({}));
+    alert("Clear failed: " + (d.error || "unknown error"));
+    return;
+  }
+  polygonPoints = [];
+  redrawCanvas();
+  showToast("Zone cleared.");
+}
+
+async function loadPolygon() {
+  if (editMode) return;   // never overwrite points mid-edit
+  try {
+    const r = await fetch("{{ url_for('admin_live_polygon_get') }}");
+    const d = await r.json();
+    if (d.points && d.points.length >= 4) {
+      polygonPoints = d.points;
+    } else {
+      polygonPoints = [];
+    }
+    redrawCanvas();
+  } catch (e) {}
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   DETECTION START / STOP
+═══════════════════════════════════════════════════════════════ */
+async function startDetection() {
+  const btn = document.getElementById("btn-det-start");
+  btn.textContent = "Starting…"; btn.disabled = true;
+  try {
+    const ctl = new AbortController();
+    const timeout = setTimeout(() => ctl.abort(), 20000);
+    const r = await fetch("{{ url_for('admin_live_detection_start') }}", {
+      method: "POST",
+      signal: ctl.signal,
+    });
+    clearTimeout(timeout);
+    const d = await r.json();
+    if (d.ok) {
+      // Enable detection UI — canvas stays VISIBLE while model warms up.
+      // pollDetectionStatus() will hide canvas once d.active becomes true.
+      setDetectionUI(true);
+      if (d.starting && !d.active) {
+        showToast("Detection is warming up (loading model)…", 4500);
+      }
+      // If already active on this call, hide canvas immediately
+      if (d.active && !editMode) {
+        canvas.style.opacity = "0";
+      }
+      if (!d.polygon_loaded) {
+        showToast("⚠ No polygon defined — draw one first for accurate detection.", 6000);
+      }
+      if (d.last_error) {
+        alert("Detection startup issue: " + d.last_error);
+      }
+    } else {
+      alert("Detection failed to start. " + (d.error || d.last_error || "Is the YOLO model available?"));
+    }
+  } catch (e) {
+    alert("Detection start request timed out or failed. Please try again.");
+  } finally {
+    btn.textContent = "▶ Start Detection"; btn.disabled = false;
+  }
+}
+
+async function stopDetection() {
+  await fetch("{{ url_for('admin_live_detection_stop') }}", { method: "POST" });
+  setDetectionUI(false);
+}
+
+function setDetectionUI(active) {
+  detectionActive = active;
+  document.getElementById("btn-det-start").style.display = active ? "none" : "";
+  document.getElementById("btn-det-stop").style.display  = active ? "" : "none";
+  document.getElementById("det-badge").style.display     = active ? "" : "none";
+  document.getElementById("det-stats-wrap").style.display = active ? "" : "none";
+
+  if (active) {
+    // Canvas stays visible during warmup — pollDetectionStatus hides it when model is live
+    if (!_detPollInterval) {
+      _detPollInterval = setInterval(pollDetectionStatus, 800);
+    }
+  } else {
+    // Detection stopped: always show canvas so polygon is visible on raw feed
+    if (!editMode) canvas.style.opacity = "1";
+    if (_detPollInterval) { clearInterval(_detPollInterval); _detPollInterval = null; }
+    // Reset detection stats
+    ["ds-ped","ds-veh","ds-ped-zone","ds-veh-zone","ds-violations"].forEach(id => {
+      document.getElementById(id).textContent = "0";
+    });
+  }
+}
+
+async function pollDetectionStatus() {
+  try {
+    const r = await fetch("{{ url_for('admin_live_detection_status') }}");
+    const d = await r.json();
+    document.getElementById("ds-ped").textContent       = d.ped_total;
+    document.getElementById("ds-veh").textContent       = d.veh_total;
+    document.getElementById("ds-ped-zone").textContent  = d.ped_in_zone;
+    document.getElementById("ds-veh-zone").textContent  = d.veh_in_zone;
+    document.getElementById("ds-violations").textContent = d.session_violations;
+
+    if (d.active_violation) {
+      document.getElementById("violation-alert").classList.add("visible");
+    } else {
+      document.getElementById("violation-alert").classList.remove("visible");
+    }
+
+    // Once the model is fully loaded and processing, OpenCV draws the polygon on frames.
+    // Hide the JS canvas overlay at that point to avoid double-drawing.
+    if (d.active && detectionActive && !editMode && canvas.style.opacity !== "0") {
+      canvas.style.opacity = "0";
+    }
+
+    // Sync UI if detection stopped from another source (e.g. error or stop button on another tab)
+    if (!d.active && !d.starting && detectionActive) setDetectionUI(false);
+  } catch (e) {}
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   CAMERA CONTROLS
+═══════════════════════════════════════════════════════════════ */
+function setSource(val) { document.getElementById("cam-source").value = val; }
 
 function setCamBadge(connected, text) {
   const badge = document.getElementById("cam-badge");
   const dot   = document.getElementById("cam-dot");
-  const label = document.getElementById("cam-status-text");
   badge.className = "overlay-badge " + (connected ? "online" : "offline");
   dot.style.background = connected ? "var(--accent-green)" : "var(--accent-red)";
-  label.textContent = text;
+  document.getElementById("cam-status-text").textContent = text;
 }
 
-function connectCamera() {
-  const source = document.getElementById("cam-source").value.trim();
-  const btn    = document.getElementById("btn-connect");
-  btn.textContent = "Connecting…";
-  btn.disabled    = true;
+function setSourceBadge(source) {
+  const badge = document.getElementById("source-badge");
+  if (!badge) return;
+  const text = (source || "").trim();
+  if (!text) {
+    badge.style.display = "none";
+    badge.textContent = "";
+    return;
+  }
+  badge.style.display = "";
+  badge.textContent = text.length > 42 ? text.slice(0, 42) + "…" : text;
+}
 
+function connectCamera(sourceOverride = null) {
+  const source = (sourceOverride || document.getElementById("cam-source").value).trim();
+  const btn    = document.getElementById("btn-connect");
+  btn.textContent = "Connecting…"; btn.disabled = true;
   const fd = new FormData();
   fd.append("source", source);
-
   fetch("{{ url_for('admin_live_start') }}", { method: "POST", body: fd })
     .then(r => r.json())
     .then(d => {
-      btn.textContent = "Connect";
-      btn.disabled    = false;
+      btn.textContent = "Connect"; btn.disabled = false;
       const errEl = document.getElementById("cam-error");
       if (d.ok) {
         setCamBadge(true, `LIVE · ${d.width}×${d.height}`);
+        const usedSource = (d.source || source);
+        setSourceBadge(usedSource);
+        document.getElementById("cam-source").value = usedSource;
         document.getElementById("btn-disconnect").style.display = "";
         document.getElementById("ls-fps").textContent = d.fps;
         errEl.style.display = "none";
-        // Reload the img to re-attach to stream
+        // Update frame dims for correct polygon scaling
+        frameW = d.width;
+        frameH = d.height;
         const img = document.getElementById("live-img");
-        img.src   = img.src.split("?")[0] + "?t=" + Date.now();
+        img.dataset.frameWidth  = d.width;
+        img.dataset.frameHeight = d.height;
+        img.src = img.src.split("?")[0] + "?t=" + Date.now();
+        syncCanvas();
+        // Only auto-start detection if not currently drawing a polygon
+        if (!detectionActive && !editMode) {
+          startDetection();
+        }
       } else {
         setCamBadge(false, "OFFLINE");
         document.getElementById("cam-error-text").textContent = d.error || "Connection failed.";
         errEl.style.display = "";
       }
     })
-    .catch(() => {
-      btn.textContent = "Connect"; btn.disabled = false;
-    });
+    .catch(() => { btn.textContent = "Connect"; btn.disabled = false; });
 }
 
 function disconnectCamera() {
@@ -407,46 +854,108 @@ function disconnectCamera() {
     .then(r => r.json())
     .then(() => {
       setCamBadge(false, "OFFLINE");
+      setSourceBadge("");
       document.getElementById("btn-disconnect").style.display = "none";
       document.getElementById("ls-fps").textContent = "—";
     });
 }
 
-/* ── Violation log polling ────────────────────────────────── */
+function loadTestVideo(showToastNotice = true) {
+  const input = document.getElementById("cam-source");
+  const demo = (input.dataset.demoSource || "Videos/v2.mp4").trim();
+  if (!demo) return;
+  setSource(demo);
+  // Connect only — do NOT auto-start detection; user must press Start Detection manually
+  const btn = document.getElementById("btn-connect");
+  btn.textContent = "Connecting…"; btn.disabled = true;
+  const fd = new FormData();
+  fd.append("source", demo);
+  fetch("{{ url_for('admin_live_start') }}", { method: "POST", body: fd })
+    .then(r => r.json())
+    .then(d => {
+      btn.textContent = "Connect"; btn.disabled = false;
+      const errEl = document.getElementById("cam-error");
+      if (d.ok) {
+        setCamBadge(true, `LIVE · ${d.width}×${d.height}`);
+        const usedSource = (d.source || demo);
+        setSourceBadge(usedSource);
+        document.getElementById("cam-source").value = usedSource;
+        document.getElementById("btn-disconnect").style.display = "";
+        document.getElementById("ls-fps").textContent = d.fps;
+        errEl.style.display = "none";
+        frameW = d.width;
+        frameH = d.height;
+        const img = document.getElementById("live-img");
+        img.dataset.frameWidth  = d.width;
+        img.dataset.frameHeight = d.height;
+        img.src = img.src.split("?")[0] + "?t=" + Date.now();
+        syncCanvas();
+      } else {
+        setCamBadge(false, "OFFLINE");
+        document.getElementById("cam-error-text").textContent = d.error || "Connection failed.";
+        errEl.style.display = "";
+      }
+    })
+    .catch(() => { btn.textContent = "Connect"; btn.disabled = false; });
+  if (showToastNotice) {
+    showToast("Demo video connected. Press Start Detection when ready.", 3500);
+  }
+}
 
-let _lastViolationId = null;
+function setCheck(id, ok) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.classList.remove("ok", "fail");
+  el.classList.add(ok ? "ok" : "fail");
+  el.textContent = ok ? "OK" : "FAIL";
+}
 
+function refreshChecks() {
+  fetch("{{ url_for('admin_live_checks') }}")
+    .then(r => r.json())
+    .then(d => {
+      const checks = d.checks || {};
+      setCheck("chk-yolo", !!(checks.yolo && checks.yolo.ok));
+      setCheck("chk-cv", !!(checks.opencv && checks.opencv.ok));
+      setCheck("chk-orb", !!(checks.orb && checks.orb.ok));
+      setCheck("chk-fsm", !!(checks.fsm_rules && checks.fsm_rules.ok));
+      setCheck("chk-pipe", !!(checks.pipeline && checks.pipeline.ok));
+    })
+    .catch(() => {
+      ["chk-yolo", "chk-cv", "chk-orb", "chk-fsm", "chk-pipe"].forEach(id => setCheck(id, false));
+    });
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   VIOLATION LOG POLLING
+═══════════════════════════════════════════════════════════════ */
 function renderLog(violations) {
   const wrap = document.getElementById("violation-log");
   if (!violations.length) {
-    wrap.innerHTML = `<div style="text-align:center; padding:32px; color:var(--text-muted);
-                      font-size:13px; font-family:var(--font-mono);">No violations yet.</div>`;
+    wrap.innerHTML = `<div style="text-align:center;padding:32px;color:var(--text-muted);
+                      font-size:13px;font-family:var(--font-mono);">No violations yet.</div>`;
     return;
   }
-
-  // Check if newest record changed → flash alert
   const newest = violations[0];
   if (_lastViolationId && newest.id !== _lastViolationId) {
-    const alert = document.getElementById("violation-alert");
-    alert.classList.add("visible");
-    setTimeout(() => alert.classList.remove("visible"), 5000);
+    const al = document.getElementById("violation-alert");
+    al.classList.add("visible");
+    setTimeout(() => al.classList.remove("visible"), 5000);
   }
   _lastViolationId = newest.id;
-
   wrap.innerHTML = violations.map(v => {
-    const ts    = (v.timestamp || "").substring(0, 19).replace("T", " ");
+    const ts    = (v.timestamp || "").substring(0,19).replace("T"," ");
     const plate = v.plate_number || "UNDETECTED";
     const sev   = (v.severity || "").toLowerCase();
-    const type  = (v.violation_type || "").replace(/_/g, " ");
-    return `
-      <div class="log-entry">
-        <div class="log-dot ${sev}"></div>
-        <div class="log-text">
-          <div class="log-plate">${plate}</div>
-          <div class="log-meta">${ts} · ${type}</div>
-        </div>
-        <a class="log-link" href="/admin/violations/${v.id}">VIEW</a>
-      </div>`;
+    const type  = (v.violation_type || "").replace(/_/g," ");
+    return `<div class="log-entry">
+      <div class="log-dot ${sev}"></div>
+      <div class="log-text">
+        <div class="log-plate">${plate}</div>
+        <div class="log-meta">${ts} · ${type}</div>
+      </div>
+      <a class="log-link" href="/admin/violations/${v.id}">VIEW</a>
+    </div>`;
   }).join("");
 }
 
@@ -456,8 +965,6 @@ function pollViolations() {
     .then(d => renderLog(d.violations || []))
     .catch(() => {});
 }
-
-/* ── Stat refresh ────────────────────────────────────────── */
 
 function refreshStats() {
   fetch("{{ url_for('admin_dashboard_data') }}")
@@ -469,13 +976,52 @@ function refreshStats() {
     .catch(() => {});
 }
 
-/* ── Init ────────────────────────────────────────────────── */
+/* ═══════════════════════════════════════════════════════════════
+   TOAST HELPER
+═══════════════════════════════════════════════════════════════ */
+function showToast(msg, duration = 3000) {
+  const t = document.createElement("div");
+  t.style.cssText = `position:fixed;bottom:24px;right:24px;z-index:9999;
+    background:var(--bg-elevated);border:1px solid var(--accent-amber);
+    color:var(--text-primary);padding:10px 18px;border-radius:var(--radius);
+    font-family:var(--font-mono);font-size:13px;box-shadow:0 4px 20px rgba(0,0,0,.4);
+    transition:opacity .3s;`;
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => { t.style.opacity = "0"; setTimeout(() => t.remove(), 300); }, duration);
+}
 
+/* ═══════════════════════════════════════════════════════════════
+   INIT
+═══════════════════════════════════════════════════════════════ */
 document.addEventListener("DOMContentLoaded", () => {
+  setSourceBadge("{{ camera_status.source or '' }}");
+  loadPolygon();
   pollViolations();
   refreshStats();
+  refreshChecks();
   setInterval(pollViolations, 3000);
   setInterval(refreshStats,   10000);
+  setInterval(refreshChecks,  10000);
+
+  // If no active source is connected, start with the known-good demo video.
+  fetch("{{ url_for('admin_live_status') }}")
+    .then(r => r.json())
+    .then(s => {
+      if (!s.connected) loadTestVideo(false);
+    })
+    .catch(() => {});
+
+  // Check if detection was already running (page reload)
+  fetch("{{ url_for('admin_live_detection_status') }}")
+    .then(r => r.json())
+    .then(d => {
+      if (d.active || d.starting) {
+        setDetectionUI(true);
+        if (d.active) canvas.style.opacity = "0";
+      }
+    })
+    .catch(() => {});
 });
 </script>
 {% endblock %}

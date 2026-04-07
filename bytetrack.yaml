@@ -4,10 +4,10 @@
 tracker_type: bytetrack
 
 # Detection confidence gate for "high-confidence" tracks
-track_high_thresh: 0.6      # was 0.5 — reduces low-confidence ghost tracks
+track_high_thresh: 0.30     # must be >= LIVE_DETECTION_CONFIDENCE (0.22)
 
 # Minimum confidence to initialise a brand-new track
-new_track_thresh: 0.6
+new_track_thresh: 0.25      # must be >= LIVE_DETECTION_CONFIDENCE (0.22)
 
 # IOU match threshold for re-associating detections to existing tracks
 # Higher = stricter (less likely to swap IDs across nearby objects)

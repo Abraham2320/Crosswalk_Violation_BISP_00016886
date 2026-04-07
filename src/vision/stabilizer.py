@@ -19,9 +19,13 @@ class VideoStabilizer:
     stabilisation state.
     """
 
-    MIN_INLIERS = 8          # minimum RANSAC inliers to accept a homography
+    MIN_INLIERS = 12         # minimum RANSAC inliers to accept a homography
     MAX_FEATURES = 1000      # ORB features per frame
     MATCH_RATIO = 0.75       # Lowe ratio-test threshold
+    MAX_TRANSLATION_FRAC = 0.35   # reject shifts larger than 35% of frame
+    MIN_SCALE = 0.75              # reject extreme zoom-out
+    MAX_SCALE = 1.35              # reject extreme zoom-in
+    MAX_PERSPECTIVE_TERM = 0.0025 # reject strong projective skew
 
     def __init__(self) -> None:
         self._orb = cv2.ORB_create(nfeatures=self.MAX_FEATURES)
@@ -64,7 +68,13 @@ class VideoStabilizer:
             self._last_H_inv = H_inv
             self._stable = True
         else:
-            self._stable = False  # fall back to last known good transform
+            self._stable = False
+
+        # Fail-open behavior: if homography is unstable, show the original frame
+        # instead of warping with a stale transform (prevents "angled/black" output).
+        if not self._stable:
+            self._draw_status(frame)
+            return frame
 
         stabilised = cv2.warpPerspective(
             frame, self._last_H_inv, (w, h),
@@ -108,7 +118,43 @@ class VideoStabilizer:
         if inliers < self.MIN_INLIERS:
             return None
 
+        if not self._is_homography_sane(H):
+            return None
+
         return H  # already the inverse direction (current → ref)
+
+    def _is_homography_sane(self, H: np.ndarray) -> bool:
+        """Reject transforms that are likely to produce heavy perspective distortion."""
+        if H.shape != (3, 3):
+            return False
+        if not np.isfinite(H).all():
+            return False
+
+        # Normalize to keep comparisons stable.
+        if abs(H[2, 2]) < 1e-9:
+            return False
+        Hn = H / H[2, 2]
+
+        # Projective terms too large => strong keystone/shear artifacts.
+        if abs(Hn[2, 0]) > self.MAX_PERSPECTIVE_TERM or abs(Hn[2, 1]) > self.MAX_PERSPECTIVE_TERM:
+            return False
+
+        # Translation bounded by frame size.
+        h, w = self._ref_shape if self._ref_shape is not None else (720, 1280)
+        max_tx = w * self.MAX_TRANSLATION_FRAC
+        max_ty = h * self.MAX_TRANSLATION_FRAC
+        if abs(Hn[0, 2]) > max_tx or abs(Hn[1, 2]) > max_ty:
+            return False
+
+        # Approximate local scales from affine part.
+        sx = float(np.hypot(Hn[0, 0], Hn[1, 0]))
+        sy = float(np.hypot(Hn[0, 1], Hn[1, 1]))
+        if not (self.MIN_SCALE <= sx <= self.MAX_SCALE):
+            return False
+        if not (self.MIN_SCALE <= sy <= self.MAX_SCALE):
+            return False
+
+        return True
 
     @staticmethod
     def _draw_status(frame: np.ndarray) -> None:

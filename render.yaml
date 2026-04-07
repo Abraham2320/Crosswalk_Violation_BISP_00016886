@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: crosswalk-enforcement
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app --bind 0.0:$PORT --workers 2 --threads 4 --timeout 120
+    envVars:
+      - key: PYTHONPATH
+        value: src
+      - key: FLASK_ENV
+        value: production
+      - key: LOCATION_NAME
+        value: Crosswalk A
+      - key: LOCATION_CODE
+        value: CW-A-01
+      - key: LOCATION_LATITUDE
+        value: "41.2963"
+      - key: LOCATION_LONGITUDE
+        value: "69.2798"
+      - key: DEFAULT_FINE_AMOUNT
+        value: "150000"
+      - key: AUTHORITY_NAME
+        value: WIUT Traffic Enforcement Unit
+      # Set these as secret env vars in the Render dashboard:
+      # YANDEX_MAPS_API_KEY, ANTHROPIC_API_KEY, SECRET_KEY
+    disk:
+      name: data
+      mountPath: /opt/render/project/src
+      sizeGB: 1

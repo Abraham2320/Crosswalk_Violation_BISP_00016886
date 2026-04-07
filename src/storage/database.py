@@ -13,7 +13,7 @@ from config import AppSettings
 from schemas import InvoiceRecordData
 
 try:
-    from sqlalchemy import DateTime, Float, ForeignKey, Integer, Numeric, String, Text, create_engine, func, select
+    from sqlalchemy import DateTime, Float, ForeignKey, Integer, Numeric, String, Text, create_engine, func, select, text
     from sqlalchemy.exc import SQLAlchemyError
     from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, relationship, sessionmaker
 
@@ -69,6 +69,8 @@ if SQLALCHEMY_AVAILABLE:
             nullable=True,
         )
         vehicle_speed_estimate: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+        snapshot_path: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+        location_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
         vehicle: Mapped[Optional[VehicleRecord]] = relationship(back_populates="violations")
         invoice: Mapped[Optional["InvoiceRecord"]] = relationship(back_populates="violation", uselist=False)
@@ -95,12 +97,35 @@ if SQLALCHEMY_AVAILABLE:
     class Database:
         def __init__(self, settings: AppSettings):
             self.settings = settings
-            self.database_url = self._resolve_database_url(settings)
-            connect_args = {}
-            if self.database_url.startswith("sqlite"):
-                connect_args["check_same_thread"] = False
-            self.engine = create_engine(self.database_url, future=True, connect_args=connect_args)
+            primary_url = self._resolve_database_url(settings)
+            self.database_url, self.engine = self._build_engine_with_fallback(
+                primary_url,
+                settings.storage.sqlite_fallback_url,
+            )
             self.SessionLocal = sessionmaker(bind=self.engine, expire_on_commit=False, class_=Session)
+
+        def _build_engine(self, url: str):
+            connect_args = {}
+            if url.startswith("sqlite"):
+                connect_args["check_same_thread"] = False
+            return create_engine(url, future=True, connect_args=connect_args)
+
+        def _build_engine_with_fallback(self, primary_url: str, fallback_url: str):
+            # Prefer configured DB, but gracefully fall back to SQLite when Postgres
+            # is unavailable in local development (missing driver, no server, etc.).
+            if primary_url.startswith("postgresql"):
+                try:
+                    engine = self._build_engine(primary_url)
+                    with engine.connect() as conn:
+                        conn.execute(text("SELECT 1"))
+                    return primary_url, engine
+                except Exception as exc:
+                    if not fallback_url.startswith("sqlite"):
+                        fallback_url = "sqlite:///crosswalk_violations.db"
+                    print(f"[Database] Primary DB unavailable; falling back to SQLite. ({exc})")
+                    return fallback_url, self._build_engine(fallback_url)
+
+            return primary_url, self._build_engine(primary_url)
 
         def _resolve_database_url(self, settings: AppSettings) -> str:
             url = settings.storage.database_url
@@ -255,6 +280,8 @@ else:
         llm_report_text: Optional[str]
         vehicle_ref_id: Optional[str] = None
         vehicle_speed_estimate: Optional[float] = None
+        snapshot_path: Optional[str] = None
+        location_name: Optional[str] = None
 
 
     @dataclass(slots=True)

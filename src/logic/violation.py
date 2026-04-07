@@ -103,6 +103,31 @@ def _point_in_polygon(point: Tuple[float, float], polygon: np.ndarray) -> bool:
     return cv2.pointPolygonTest(poly, pt, False) >= 0
 
 
+def _box_overlaps_polygon(bbox: Tuple[float, float, float, float], polygon: np.ndarray,
+                          min_ratio: float = 0.01) -> bool:
+    """
+    True when the pedestrian bounding box overlaps the polygon by at least
+    min_ratio of the box area.  This handles angled camera setups where the
+    pedestrian centroid can be outside the polygon boundary even though the
+    body clearly overlaps the crosswalk zone.
+    """
+    x1, y1, x2, y2 = map(float, bbox)
+    box_pts = np.array([[x1, y1], [x2, y1], [x2, y2], [x1, y2]], dtype=np.float32)
+    poly_pts = polygon.astype(np.float32)
+    inter, _ = cv2.intersectConvexConvex(poly_pts, box_pts)
+    box_area = (x2 - x1) * (y2 - y1)
+    return (inter / box_area) >= min_ratio if box_area > 0 else False
+
+
+def _ped_in_polygon(ped_track, polygon: np.ndarray) -> bool:
+    """Check pedestrian against polygon using bbox when available, centroid otherwise."""
+    if ped_track.bbox is not None:
+        return _box_overlaps_polygon(ped_track.bbox, polygon)
+    if ped_track.centroid is not None:
+        return _point_in_polygon(ped_track.centroid, polygon)
+    return False
+
+
 # ---------------------------------------------------------------------------
 # Pedestrian FSM update
 # ---------------------------------------------------------------------------
@@ -117,18 +142,18 @@ def update_pedestrian_state(
     """
     Mutate ped_track.state based on the pedestrian's current centroid position.
 
-    OUTSIDE  → ENTERING  : centroid enters polygon
+    OUTSIDE  → ENTERING  : box/centroid enters polygon
     ENTERING → CROSSING  : in near half (not yet past midline)
     ENTERING → CLEARING  : already past midline on entry
     CROSSING → CLEARING  : centroid crosses midline
-    CLEARING → EXITED    : centroid leaves polygon
-    EXITED   → ENTERING  : centroid re-enters (reuse track, reset exit_frame)
-    Any inside state → OUTSIDE : centroid left unexpectedly (short visit)
+    CLEARING → EXITED    : box/centroid leaves polygon
+    EXITED   → ENTERING  : box/centroid re-enters (reuse track, reset exit_frame)
+    Any inside state → OUTSIDE : box/centroid left unexpectedly (short visit)
     """
     if ped_track.centroid is None:
         return
 
-    in_polygon = _point_in_polygon(ped_track.centroid, polygon)
+    in_polygon = _ped_in_polygon(ped_track, polygon)
 
     if ped_track.state == "OUTSIDE":
         if in_polygon:
@@ -239,11 +264,11 @@ def check_violation(
         return None
 
     if ped_state in ("ENTERING", "CROSSING"):
-        # Guard: confirm centroid is inside polygon and not yet past the midline.
-        # This prevents false positives when the FSM state lags the actual position.
+        # Guard: confirm box/centroid still overlaps polygon and ped hasn't crossed midline.
+        # Use box intersection (angled camera: centroid may be outside while body overlaps).
         if (
-            ped_track.centroid is not None
-            and _point_in_polygon(ped_track.centroid, polygon)
+            _ped_in_polygon(ped_track, polygon)
+            and ped_track.centroid is not None
             and not pedestrian_is_in_exit_zone(ped_track.centroid, polygon_midline, approach_axis)
             and not was_yielding(car_track)
         ):

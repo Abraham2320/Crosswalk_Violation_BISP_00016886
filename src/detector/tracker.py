@@ -183,6 +183,9 @@ class PedestrianTrack:
     centroid: Optional[Tuple[float, float]] = None
     prev_centroid: Optional[Tuple[float, float]] = None
     velocity_history: deque = field(default_factory=lambda: deque(maxlen=10))
+    # Bounding box [x1, y1, x2, y2] — used for box-intersection polygon check
+    # so a partial overlap (angled camera) still registers as inside the zone.
+    bbox: Optional[Tuple[float, float, float, float]] = None
 
 
 @dataclass
