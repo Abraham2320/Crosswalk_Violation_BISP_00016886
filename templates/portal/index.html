@@ -74,6 +74,106 @@
     </div>
   </div>
 
+  <!-- How it works / demo section -->
+  <div class="portal-demo-section">
+
+    <div class="portal-demo-title">How It Works</div>
+
+    <div class="portal-steps">
+      <div class="portal-step">
+        <div class="portal-step-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <rect x="2" y="3" width="9" height="7" rx="1.5" stroke="currentColor" stroke-width="1.5"/>
+            <path d="M11 7l4-2.5v7L11 9" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+            <circle cx="5.5" cy="6.5" r="1.2" fill="currentColor"/>
+          </svg>
+        </div>
+        <div class="portal-step-label">Detected by camera</div>
+        <div class="portal-step-desc">AI-powered traffic cameras identify your vehicle at the crosswalk</div>
+      </div>
+      <div class="portal-step-arrow">→</div>
+      <div class="portal-step">
+        <div class="portal-step-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <rect x="3" y="6" width="12" height="7" rx="1" stroke="currentColor" stroke-width="1.5"/>
+            <path d="M7 9h4M7 11.5h2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+            <circle cx="18" cy="7" r="3" stroke="var(--accent-amber)" stroke-width="1.5"/>
+            <path d="M18 6v1.5l1 1" stroke="var(--accent-amber)" stroke-width="1.2" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <div class="portal-step-label">Plate recognised</div>
+        <div class="portal-step-desc">Automatic OCR reads your license plate number from the footage</div>
+      </div>
+      <div class="portal-step-arrow">→</div>
+      <div class="portal-step">
+        <div class="portal-step-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <path d="M14 3H6a2 2 0 00-2 2v14a2 2 0 002 2h12a2 2 0 002-2V9l-6-6z" stroke="currentColor" stroke-width="1.5"/>
+            <path d="M14 3v6h6M8 13h8M8 17h5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <div class="portal-step-label">Invoice issued</div>
+        <div class="portal-step-desc">A formal notice with evidence, fine details and appeal instructions is generated</div>
+      </div>
+    </div>
+
+    <!-- Sample violation card -->
+    <div class="portal-demo-card">
+      <div class="portal-demo-card-header">
+        <span class="portal-demo-badge">SAMPLE RECORD</span>
+        <span style="font-family:var(--font-mono);font-size:11px;color:var(--text-muted);">What you will see after searching</span>
+      </div>
+      <div class="portal-demo-body">
+        <div class="portal-demo-snapshot">
+          <div class="portal-demo-snapshot-inner">
+            <svg width="40" height="40" viewBox="0 0 40 40" fill="none" style="opacity:0.25;">
+              <rect x="2" y="8" width="24" height="16" rx="2" stroke="currentColor" stroke-width="2"/>
+              <path d="M26 16l10-5v14l-10-5" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+              <circle cx="12" cy="15" r="3" fill="currentColor"/>
+            </svg>
+            <div style="font-size:10px;color:var(--text-muted);margin-top:8px;font-family:var(--font-mono);">VIOLATION SNAPSHOT</div>
+          </div>
+        </div>
+        <div class="portal-demo-info">
+          <div class="portal-demo-row">
+            <span class="portal-demo-field">Plate</span>
+            <span class="portal-demo-value" style="font-family:var(--font-mono);letter-spacing:0.15em;color:var(--accent-amber);">01A•••BC</span>
+          </div>
+          <div class="portal-demo-row">
+            <span class="portal-demo-field">Type</span>
+            <span class="portal-demo-value">FAILED TO YIELD</span>
+          </div>
+          <div class="portal-demo-row">
+            <span class="portal-demo-field">Date</span>
+            <span class="portal-demo-value">12 March 2025 at 09:47:32</span>
+          </div>
+          <div class="portal-demo-row">
+            <span class="portal-demo-field">Location</span>
+            <span class="portal-demo-value">Crosswalk A — CW-A-01</span>
+          </div>
+          <div class="portal-demo-row">
+            <span class="portal-demo-field">Fine</span>
+            <span class="portal-demo-value" style="color:var(--accent-red);font-weight:700;">150 000 UZS</span>
+          </div>
+          <div class="portal-demo-row">
+            <span class="portal-demo-field">Status</span>
+            <span class="portal-demo-value">
+              <span style="display:inline-flex;align-items:center;gap:5px;
+                           background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);
+                           border-radius:4px;padding:2px 8px;font-size:11px;color:var(--accent-red);">
+                ● RECORDED
+              </span>
+            </span>
+          </div>
+        </div>
+      </div>
+      <div class="portal-demo-footer">
+        Evidence photos · AI-generated incident report · Formal invoice · Appeal instructions
+      </div>
+    </div>
+
+  </div>
+
   <footer class="site-footer" style="border-top:1px solid var(--border);">
     WIUT Traffic Enforcement System &middot; {{ current_year }}
   </footer>

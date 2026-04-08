@@ -40,8 +40,13 @@ from auth import (
     record_failed_attempt,
 )
 from database import db_connection, init_db, log_audit
-from live_processor import live_proc
-from stream import camera_manager, mjpeg_generator
+from live_processor import live_proc, proc_registry
+from stream import camera_manager, mjpeg_generator, registry as cam_registry, CAMERA_CONFIGS
+
+try:
+    import anthropic as _anthropic
+except ImportError:
+    _anthropic = None
 
 # ---------------------------------------------------------------------------
 # App setup
@@ -83,6 +88,56 @@ def _admin() -> str:
 def _disp_location(v: dict) -> str:
     """Prefer location_name, fall back to location."""
     return v.get("location_name") or v.get("location") or ""
+
+
+def _chat_db_context() -> str:
+    """Build a concise DB context string for the AI chat / summary."""
+    try:
+        with db_connection() as conn:
+            total = conn.execute("SELECT COUNT(*) FROM violations").fetchone()[0]
+            today = conn.execute(
+                "SELECT COUNT(*) FROM violations WHERE DATE(timestamp) = DATE('now')"
+            ).fetchone()[0]
+            high = conn.execute(
+                "SELECT COUNT(*) FROM violations WHERE severity='HIGH'"
+            ).fetchone()[0]
+            unique_v = conn.execute(
+                "SELECT COUNT(DISTINCT vehicle_id) FROM violations"
+            ).fetchone()[0]
+            peak_row = conn.execute(
+                "SELECT CAST(strftime('%H',timestamp) AS INTEGER) AS hr, COUNT(*) AS n "
+                "FROM violations GROUP BY hr ORDER BY n DESC LIMIT 1"
+            ).fetchone()
+            peak_hour = f"{peak_row[0]:02d}:00" if peak_row else "N/A"
+            top5 = conn.execute(
+                "SELECT COALESCE(NULLIF(plate_number,''),'VEH-'||vehicle_id) AS lbl, "
+                "COUNT(*) AS n FROM violations GROUP BY lbl ORDER BY n DESC LIMIT 5"
+            ).fetchall()
+            top5_str = ", ".join(f"{r[0]} ({r[1]}x)" for r in top5) or "N/A"
+            plate_rate_row = conn.execute(
+                "SELECT SUM(CASE WHEN plate_number IS NOT NULL AND plate_number!='' THEN 1 ELSE 0 END)*100.0/MAX(COUNT(*),1) "
+                "FROM violations"
+            ).fetchone()
+            plate_rate = f"{plate_rate_row[0]:.1f}%" if plate_rate_row and plate_rate_row[0] else "N/A"
+    except Exception:
+        return "Database unavailable."
+    cam = camera_manager.status()
+    det = live_proc.get_stats()
+    return (
+        f"Crosswalk Violation System — Live Status\n"
+        f"- Total violations recorded: {total}\n"
+        f"- Violations today: {today}\n"
+        f"- High-severity violations: {high}\n"
+        f"- Unique vehicles detected: {unique_v}\n"
+        f"- Peak violation hour: {peak_hour}\n"
+        f"- Top offenders: {top5_str}\n"
+        f"- Plate recognition rate: {plate_rate}\n"
+        f"- Camera: {'LIVE at ' + (cam.get('source') or 'unknown') if cam.get('connected') else 'OFFLINE'}\n"
+        f"- Detection: {'ACTIVE' if det.get('active') else 'INACTIVE'}, "
+        f"session violations: {det.get('session_violations', 0)}\n"
+        f"- Location: {os.getenv('LOCATION_NAME','Crosswalk A')}, "
+        f"{os.getenv('LOCATION_LATITUDE','41.2963')}, {os.getenv('LOCATION_LONGITUDE','69.2798')}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -357,6 +412,15 @@ def admin_violation_detail(violation_id: str):
     log_audit("VIEW_VIOLATION", target=violation_id, username=_admin())
     v = _row(row)
     v["display_location"] = _disp_location(v)
+    # Force-set GPS from env (DB has no lat/lng columns — same crosswalk for every record)
+    _lat = os.getenv("LOCATION_LATITUDE",  "41.2963")
+    _lng = os.getenv("LOCATION_LONGITUDE", "69.2798")
+    try:
+        v["latitude"]  = float(_lat)
+        v["longitude"] = float(_lng)
+    except (TypeError, ValueError):
+        v["latitude"]  = 41.2963
+        v["longitude"] = 69.2798
     return render_template("admin/violation_detail.html", violation=v)
 
 
@@ -712,6 +776,18 @@ def admin_invoice(violation_id: str):
         except Exception:
             pass
 
+    # Inject GPS from env vars — force overwrite so None from the DB never blocks
+    # the map rendering.  The DB schema has no latitude/longitude columns.
+    _lat = os.getenv("LOCATION_LATITUDE",  "41.2963")
+    _lng = os.getenv("LOCATION_LONGITUDE", "69.2798")
+    try:
+        v["latitude"]  = float(_lat)
+        v["longitude"] = float(_lng)
+    except (TypeError, ValueError):
+        v["latitude"]  = 41.2963
+        v["longitude"] = 69.2798
+    v["location_address"] = os.getenv("LOCATION_ADDRESS", "")
+
     log_audit("VIEW_INVOICE", target=violation_id, username=_admin())
     return render_template(
         "admin/invoice_view.html",
@@ -797,6 +873,291 @@ def admin_live_polygon_save():
     live_proc.reload_polygon()
     log_audit("POLYGON_SAVE", target=f"{len(normalized)} pts", username=_admin())
     return jsonify(ok=True, count=len(normalized))
+
+
+# ---------------------------------------------------------------------------
+# ── AI CHAT + SUMMARY ────────────────────────────────────────────────────────
+# ---------------------------------------------------------------------------
+
+_CHAT_SYSTEM = (
+    "You are a traffic safety analyst assistant for a crosswalk violation detection "
+    "system in Tashkent, Uzbekistan. You have direct access to live violation data shown "
+    "at the start of each message. Be concise, factual, and actionable. "
+    "Answer only in English unless the user asks otherwise."
+)
+
+
+@app.route("/api/chat", methods=["POST"])
+@login_required
+def api_chat():
+    if _anthropic is None:
+        return jsonify(ok=False, error="anthropic package not installed"), 500
+    data    = request.get_json(silent=True) or {}
+    message = (data.get("message") or "").strip()
+    history = data.get("history") or []
+    if not message:
+        return jsonify(ok=False, error="Empty message"), 400
+
+    db_ctx   = _chat_db_context()
+    # Prepend DB context to the user's very first message so the model always
+    # has fresh data; subsequent turns carry their own history.
+    first_content = f"Current system data:\n{db_ctx}\n\nUser question: {message}"
+    messages = []
+    for h in history[-12:]:
+        role    = h.get("role", "user")
+        content = h.get("content", "")
+        if role in ("user", "assistant") and content:
+            messages.append({"role": role, "content": content})
+    messages.append({"role": "user", "content": first_content})
+
+    try:
+        client = _anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY", ""))
+        resp   = client.messages.create(
+            model="claude-sonnet-4-5",
+            max_tokens=700,
+            system=_CHAT_SYSTEM,
+            messages=messages,
+        )
+        answer = resp.content[0].text
+        return jsonify(ok=True, answer=answer)
+    except Exception as exc:
+        return jsonify(ok=False, error=str(exc)), 500
+
+
+@app.route("/admin/api/summary", methods=["POST"])
+@login_required
+def admin_api_summary():
+    if _anthropic is None:
+        return jsonify(ok=False, error="anthropic package not installed"), 500
+    db_ctx = _chat_db_context()
+    prompt = (
+        f"Based on the following data, generate a concise executive summary "
+        f"(3-5 short paragraphs) covering key metrics, notable patterns, "
+        f"current system status, and one or two actionable recommendations.\n\n"
+        f"{db_ctx}"
+    )
+    try:
+        client = _anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY", ""))
+        resp   = client.messages.create(
+            model="claude-sonnet-4-5",
+            max_tokens=900,
+            system=_CHAT_SYSTEM,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        summary = resp.content[0].text
+        return jsonify(ok=True, summary=summary)
+    except Exception as exc:
+        return jsonify(ok=False, error=str(exc)), 500
+
+
+# ---------------------------------------------------------------------------
+# ── TEMPLATE CONTEXT ─────────────────────────────────────────────────────────
+# ---------------------------------------------------------------------------
+
+@app.context_processor
+def inject_global_vars():
+    """Inject shared config into every template so partials can access them."""
+    return dict(
+        yandex_maps_api_key=os.getenv("YANDEX_MAPS_API_KEY", ""),
+        location_latitude=os.getenv("LOCATION_LATITUDE", "41.2963"),
+        location_longitude=os.getenv("LOCATION_LONGITUDE", "69.2798"),
+        location_name=os.getenv("LOCATION_NAME", "Crosswalk A"),
+    )
+
+
+
+# ---------------------------------------------------------------------------
+# ── MULTI-CAMERA ─────────────────────────────────────────────────────────────
+# ---------------------------------------------------------------------------
+
+@app.route("/admin/cameras")
+@login_required
+def admin_cameras():
+    """Camera overview grid — one card per configured camera."""
+    statuses = {}
+    for cam_id, cfg in CAMERA_CONFIGS.items():
+        cam  = cam_registry.get(cam_id)
+        proc = proc_registry.get(cam_id)
+        statuses[cam_id] = {
+            "config":     cfg,
+            "stream":     cam.status(),
+            "detection":  proc.get_stats(),
+        }
+    return render_template("admin/cameras.html", camera_statuses=statuses)
+
+
+@app.route("/admin/cameras/<string:cam_id>")
+@login_required
+def admin_camera_detail(cam_id: str):
+    """Per-camera live page (detection + polygon editor)."""
+    if cam_id not in CAMERA_CONFIGS:
+        return render_template("admin/404.html"), 404
+    cam  = cam_registry.get(cam_id)
+    proc = proc_registry.get(cam_id)
+    cfg  = CAMERA_CONFIGS[cam_id]
+    demo = cfg.get("demo", "")
+    return render_template(
+        "admin/camera_detail.html",
+        cam_id=cam_id,
+        cam_label=cfg.get("label", cam_id),
+        demo_source=demo,
+        camera_status=cam.status(),
+        detection_stats=proc.get_stats(),
+    )
+
+
+@app.route("/admin/cameras/<string:cam_id>/feed")
+@login_required
+def admin_camera_feed(cam_id: str):
+    """MJPEG stream for one camera."""
+    cam = cam_registry.get(cam_id)
+    return Response(
+        mjpeg_generator(cam),
+        mimetype="multipart/x-mixed-replace; boundary=frame",
+    )
+
+
+@app.route("/admin/cameras/<string:cam_id>/snapshot")
+@login_required
+def admin_camera_snapshot(cam_id: str):
+    """Single JPEG frame — used for polygon calibration freeze-frame."""
+    cam = cam_registry.get(cam_id)
+    return Response(cam.get_jpeg(), mimetype="image/jpeg",
+                    headers={"Cache-Control": "no-store"})
+
+
+@app.route("/admin/cameras/<string:cam_id>/start", methods=["POST"])
+@login_required
+def admin_camera_start(cam_id: str):
+    cfg    = CAMERA_CONFIGS.get(cam_id)
+    if cfg is None:
+        return jsonify(ok=False, error="Unknown camera"), 404
+    source = request.form.get("source", "").strip() or cfg.get("demo", "0")
+    cam    = cam_registry.get(cam_id)
+    ok     = cam.start(source)
+    log_audit("CAMERA_START", target=f"{cam_id}:{source}", username=_admin())
+    return jsonify(ok=ok, **cam.status())
+
+
+@app.route("/admin/cameras/<string:cam_id>/stop", methods=["POST"])
+@login_required
+def admin_camera_stop(cam_id: str):
+    cam = cam_registry.get(cam_id)
+    cam.stop()
+    log_audit("CAMERA_STOP", target=cam_id, username=_admin())
+    return jsonify(ok=True, **cam.status())
+
+
+@app.route("/admin/cameras/<string:cam_id>/status")
+@login_required
+def admin_camera_status(cam_id: str):
+    return jsonify(**cam_registry.get(cam_id).status())
+
+
+@app.route("/admin/cameras/<string:cam_id>/detection/start", methods=["POST"])
+@login_required
+def admin_camera_detection_start(cam_id: str):
+    if cam_id not in CAMERA_CONFIGS:
+        return jsonify(ok=False, error="Unknown camera"), 404
+    cam = cam_registry.get(cam_id)
+    if not cam.status().get("connected"):
+        return jsonify(ok=False, error="Camera not connected"), 400
+    # Require a valid saved polygon before detection can start
+    poly_path = PROJECT_ROOT / (
+        "crosswalk_polygon.json"
+        if cam_id in ("cam2", "default")
+        else f"crosswalk_polygon_{cam_id}.json"
+    )
+    if not poly_path.exists():
+        return jsonify(ok=False, error="No crosswalk zone defined. Draw and save a polygon first."), 400
+    try:
+        pts = json.loads(poly_path.read_text())
+        if not isinstance(pts, list) or len(pts) < 4:
+            return jsonify(ok=False, error="Crosswalk zone has fewer than 4 points. Re-draw the polygon."), 400
+    except Exception:
+        return jsonify(ok=False, error="Polygon file is invalid. Re-draw the zone."), 400
+    proc = proc_registry.get(cam_id)
+    ok   = proc.start_async()
+    log_audit("DETECTION_START", target=cam_id, username=_admin())
+    return jsonify(ok=ok, **proc.get_stats())
+
+
+@app.route("/admin/cameras/<string:cam_id>/detection/stop", methods=["POST"])
+@login_required
+def admin_camera_detection_stop(cam_id: str):
+    proc = proc_registry.get(cam_id)
+    proc.stop()
+    log_audit("DETECTION_STOP", target=cam_id, username=_admin())
+    return jsonify(ok=True, **proc.get_stats())
+
+
+@app.route("/admin/cameras/<string:cam_id>/detection/status")
+@login_required
+def admin_camera_detection_status(cam_id: str):
+    return jsonify(**proc_registry.get(cam_id).get_stats())
+
+
+@app.route("/admin/cameras/<string:cam_id>/polygon", methods=["GET"])
+@login_required
+def admin_camera_polygon_get(cam_id: str):
+    poly_path = PROJECT_ROOT / (
+        "crosswalk_polygon.json"
+        if cam_id in ("cam2", "default")
+        else f"crosswalk_polygon_{cam_id}.json"
+    )
+    if poly_path.exists():
+        try:
+            pts = json.loads(poly_path.read_text())
+            if isinstance(pts, list) and len(pts) >= 4:
+                return jsonify(points=pts)
+        except Exception:
+            pass
+    return jsonify(points=[])
+
+
+@app.route("/admin/cameras/<string:cam_id>/polygon", methods=["POST"])
+@login_required
+def admin_camera_polygon_save(cam_id: str):
+    data   = request.get_json(silent=True) or {}
+    points = data.get("points", [])
+    poly_path = PROJECT_ROOT / (
+        "crosswalk_polygon.json"
+        if cam_id in ("cam2", "default")
+        else f"crosswalk_polygon_{cam_id}.json"
+    )
+
+    if not points:
+        if poly_path.exists():
+            poly_path.unlink()
+        proc_registry.get(cam_id).reload_polygon()
+        log_audit("POLYGON_CLEAR", target=cam_id, username=_admin())
+        return jsonify(ok=True, count=0)
+
+    if not isinstance(points, list) or len(points) < 4:
+        return jsonify(ok=False, error="Need at least 4 points"), 400
+
+    try:
+        normalized = [[int(p[0]), int(p[1])] for p in points]
+    except Exception:
+        return jsonify(ok=False, error="Polygon points must be numeric"), 400
+
+    poly_path.write_text(json.dumps(normalized))
+    proc_registry.get(cam_id).reload_polygon()
+    log_audit("POLYGON_SAVE", target=f"{cam_id}/{len(normalized)} pts", username=_admin())
+    return jsonify(ok=True, count=len(normalized))
+
+
+@app.route("/admin/cameras/<string:cam_id>/recent")
+@login_required
+def admin_camera_recent(cam_id: str):
+    with db_connection() as conn:
+        rows = conn.execute(
+            """SELECT id, timestamp, plate_number, vehicle_id,
+                      violation_type, severity, snapshot_path
+               FROM   violations
+               ORDER  BY timestamp DESC LIMIT 15"""
+        ).fetchall()
+    return jsonify(violations=[dict(r) for r in rows])
 
 
 # ---------------------------------------------------------------------------

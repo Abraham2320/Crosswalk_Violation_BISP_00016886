@@ -8,13 +8,36 @@
 {% block content %}
 <div class="page-container">
 
-  <div class="page-header">
-    <div class="page-title">Violation Log</div>
-    <div class="page-subtitle">
-      {{ total_count }} record{{ 's' if total_count != 1 else '' }} found
-      &nbsp;&mdash;&nbsp;
-      page {{ current_page }} of {{ total_pages }}
+  <div class="page-header" style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
+    <div>
+      <div class="page-title">Violation Log</div>
+      <div class="page-subtitle">
+        {{ total_count }} record{{ 's' if total_count != 1 else '' }} found
+        &nbsp;&mdash;&nbsp;
+        page {{ current_page }} of {{ total_pages }}
+      </div>
     </div>
+    <button class="btn-ghost btn-sm" id="btn-map-toggle" onclick="toggleViolationMap()"
+            style="display:flex; align-items:center; gap:6px;">
+      <svg width="14" height="14" viewBox="0 0 20 20" fill="none">
+        <path d="M10 2C6.686 2 4 4.686 4 8c0 4.5 6 10 6 10s6-5.5 6-10c0-3.314-2.686-6-6-6z"
+              stroke="currentColor" stroke-width="1.5"/>
+        <circle cx="10" cy="8" r="2" stroke="currentColor" stroke-width="1.5"/>
+      </svg>
+      Map View
+    </button>
+  </div>
+
+  <!-- Violation map (hidden by default) -->
+  <div id="violation-map-card" class="card" style="display:none; padding:0; overflow:hidden; margin-bottom:24px;">
+    <div style="padding:12px 16px; border-bottom:1px solid var(--border);
+                font-family:var(--font-display); font-size:11px; font-weight:700;
+                letter-spacing:0.12em; text-transform:uppercase; color:var(--text-muted);
+                display:flex; align-items:center; justify-content:space-between;">
+      <span>📍 Crosswalk Location — {{ total_count }} violation{{ 's' if total_count != 1 else '' }}</span>
+      <button onclick="toggleViolationMap()" class="btn-ghost btn-sm" style="padding:2px 8px;">Hide</button>
+    </div>
+    <div id="violations-map" style="height:340px; width:100%;"></div>
   </div>
 
   <!-- Filter bar -->
@@ -100,7 +123,15 @@
             <td class="mono" style="white-space:nowrap; font-size:12px;">
               {{ v.timestamp[:19].replace('T',' ') if v.timestamp else '—' }}
             </td>
-            <td class="amber">{{ v.plate_number or '—' }}</td>
+            <td class="amber" style="white-space:nowrap;">
+              {{ v.plate_number or '—' }}
+              {% if v.plate_number %}
+              <button onclick="copyPlate('{{ v.plate_number }}')" title="Copy plate"
+                style="background:none; border:none; cursor:pointer; color:var(--text-muted);
+                       padding:0 4px; line-height:1; font-size:12px; vertical-align:middle;"
+                id="cp-{{ loop.index }}">⧉</button>
+              {% endif %}
+            </td>
             <td class="mono" style="font-size:12px; color:var(--text-secondary);">
               VEH-{{ v.vehicle_id }}
             </td>
@@ -186,4 +217,81 @@
   {% endif %}
 
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  // ── Copy plate to clipboard ───────────────────────────────────────────────
+  function copyPlate(plate) {
+    navigator.clipboard.writeText(plate).then(() => {
+      // brief visual feedback — show all ⧉ buttons for this plate as "✓"
+      document.querySelectorAll("button[id^='cp-']").forEach(b => {
+        if (b.closest("tr").querySelector(".amber").textContent.trim().startsWith(plate)) {
+          b.textContent = "✓";
+          setTimeout(() => b.textContent = "⧉", 1500);
+        }
+      });
+    });
+  }
+
+  // ── Violation Map ────────────────────────────────────────────────────────
+  const _V_KEY = "{{ yandex_maps_key }}";
+  const _V_LAT = {{ location_latitude if location_latitude is defined else 41.2963 }};
+  const _V_LNG = {{ location_longitude if location_longitude is defined else 69.2798 }};
+  const _V_CNT = {{ total_count }};
+  let _mapInit  = false;
+
+  function toggleViolationMap() {
+    const card = document.getElementById("violation-map-card");
+    const btn  = document.getElementById("btn-map-toggle");
+    const show  = card.style.display === "none";
+    card.style.display = show ? "" : "none";
+    btn.classList.toggle("btn-primary", show);
+    btn.classList.toggle("btn-ghost",   !show);
+    if (show && !_mapInit) initViolationMap();
+  }
+
+  function initViolationMap() {
+    if (!_V_KEY) {
+      document.getElementById("violations-map").innerHTML =
+        "<div style='padding:32px; text-align:center; color:var(--text-muted); font-size:13px;'>" +
+        "Set YANDEX_MAPS_API_KEY in .env to enable map.</div>";
+      return;
+    }
+    const s  = document.createElement("script");
+    s.src    = "https://api-maps.yandex.ru/2.1/?apikey=" + _V_KEY + "&lang=en_US";
+    s.onload = function() {
+      ymaps.ready(function() {
+        try {
+          const map = new ymaps.Map("violations-map", {
+            center: [_V_LAT, _V_LNG],
+            zoom: 17,
+            controls: ["zoomControl", "typeSelector"],
+          });
+          // Crosswalk zone circle
+          map.geoObjects.add(new ymaps.Circle(
+            [[_V_LAT, _V_LNG], 35], {},
+            { fillColor: "F5A62320", strokeColor: "F5A623", strokeWidth: 2 }
+          ));
+          // Violation count placemark
+          const mark = new ymaps.Placemark(
+            [_V_LAT, _V_LNG],
+            {
+              balloonContentHeader: "📍 Crosswalk Enforcement Zone",
+              balloonContentBody:
+                "<b>" + _V_CNT + " violation" + (_V_CNT !== 1 ? "s" : "") + "</b> recorded here.<br>" +
+                "Showing current filter results.",
+              hintContent: _V_CNT + " violations"
+            },
+            { preset: "islands#redStretchyIcon", iconContent: _V_CNT }
+          );
+          map.geoObjects.add(mark);
+          mark.balloon.open();
+          _mapInit = true;
+        } catch(e) { console.warn("Map init error:", e); }
+      });
+    };
+    document.head.appendChild(s);
+  }
+</script>
 {% endblock %}

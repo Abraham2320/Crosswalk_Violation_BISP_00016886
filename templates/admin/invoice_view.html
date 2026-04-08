@@ -513,27 +513,40 @@
 
         {% if violation.latitude and yandex_maps_key %}
           <div id="invoice-map"></div>
-          <script src="https://enterprise.api-maps.yandex.ru/2.1/?apikey={{ yandex_maps_key }}&lang=en_US" type="text/javascript"></script>
           <script>
-            ymaps.ready(function () {
-              var lat = {{ violation.latitude }};
-              var lng = {{ violation.longitude }};
-              var myMap = new ymaps.Map("invoice-map", {
-                center: [lat, lng],
-                zoom: 17,
-                type: "yandex#satellite",
-                controls: ["zoomControl", "typeSelector"]
-              });
-              myMap.geoObjects.add(new ymaps.Placemark(
-                [lat, lng],
-                {
-                  balloonContent: "<strong>{{ violation.display_location | e }}</strong><br>"
-                                + "{{ (violation.timestamp or '')[:19].replace('T',' ') }}<br>"
-                                + "{{ (violation.violation_type or '').replace('_',' ') }}"
-                },
-                { preset: "islands#redCircleDotIcon" }
-              ));
-            });
+            (function(){
+              var s = document.createElement('script');
+              s.src = 'https://api-maps.yandex.ru/2.1/?apikey={{ yandex_maps_key }}&lang=en_US';
+              s.onload = function(){
+                ymaps.ready(function () {
+                  var lat = {{ violation.latitude }};
+                  var lng = {{ violation.longitude }};
+                  var myMap = new ymaps.Map("invoice-map", {
+                    center: [lat, lng],
+                    zoom: 17,
+                    type: "yandex#satellite",
+                    controls: ["zoomControl", "typeSelector"]
+                  });
+                  // Violation pin
+                  myMap.geoObjects.add(new ymaps.Placemark(
+                    [lat, lng],
+                    {
+                      balloonContent: "<strong>{{ violation.display_location | e }}</strong><br>"
+                                    + "{{ (violation.timestamp or '')[:19].replace('T',' ') }}<br>"
+                                    + "<span style='color:#ef4444;'>{{ (violation.violation_type or '').replace('_',' ') | e }}</span>",
+                      hintContent: "{{ (violation.violation_type or '') | e }}"
+                    },
+                    { preset: "islands#redCircleDotIcon" }
+                  ));
+                  // Amber zone circle (35m radius)
+                  myMap.geoObjects.add(new ymaps.Circle(
+                    [[lat, lng], 35], {},
+                    { fillColor: "F5A62320", strokeColor: "F5A623", strokeWidth: 2 }
+                  ));
+                });  // ymaps.ready
+              };
+              document.head.appendChild(s);
+            })();
           </script>
         {% elif violation.latitude %}
           <!-- Yandex Maps fallback: static map link -->

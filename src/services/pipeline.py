@@ -37,7 +37,9 @@ class EnforcementPipeline:
             if plate_detection.plate_crop_path
             else None
         )
-        plate_number = ocr_result.plate_text if ocr_result and ocr_result.accepted else None
+        pipeline_plate = ocr_result.plate_text if ocr_result and ocr_result.accepted else None
+        # Fall back to the plate already detected by the live OCR cache (passed via event)
+        plate_number = pipeline_plate or evidence.event.plate_number or None
         if plate_number:
             self.repository.upsert_vehicle(plate_number)
 

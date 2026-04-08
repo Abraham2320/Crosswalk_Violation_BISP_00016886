@@ -1,0 +1,228 @@
+{% extends "base.html" %}
+{% block title %}Camera Overview — Crosswalk Enforcement{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
+<style>
+.cameras-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+  gap: 20px;
+}
+.cam-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  transition: border-color 0.25s, box-shadow 0.25s;
+}
+.cam-card:hover {
+  border-color: rgba(245,166,35,0.3);
+  box-shadow: 0 4px 32px rgba(0,0,0,0.4);
+}
+.cam-card.connected { border-color: rgba(0,212,140,0.2); }
+.cam-card.detecting { border-color: rgba(245,166,35,0.35); }
+
+.cam-thumb {
+  position: relative;
+  background: #000;
+  aspect-ratio: 16/9;
+  overflow: hidden;
+}
+.cam-thumb img {
+  width: 100%; height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.cam-thumb-badge {
+  position: absolute;
+  top: 10px; left: 10px;
+  display: flex; flex-direction: column; gap: 5px;
+}
+.cam-badge-pill {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-family: var(--font-mono); font-size: 10px;
+  background: rgba(6,8,14,0.85);
+  border: 1px solid rgba(255,255,255,0.07);
+  padding: 3px 9px; border-radius: 3px;
+  backdrop-filter: blur(6px);
+  letter-spacing: 0.06em; text-transform: uppercase;
+}
+.cam-badge-pill.online  { border-color: rgba(0,212,140,0.4); color: var(--accent-green); }
+.cam-badge-pill.offline { border-color: rgba(240,64,64,0.3); color: var(--accent-red); }
+.cam-badge-pill.detecting { border-color: rgba(245,166,35,0.45); color: var(--accent-amber); }
+.cam-badge-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+}
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+.cam-info {
+  padding: 16px 20px 20px;
+}
+.cam-label {
+  font-family: var(--font-display);
+  font-size: 14px; font-weight: 700;
+  letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--text-primary);
+  margin-bottom: 14px;
+}
+.cam-quick-stats {
+  display: grid; grid-template-columns: repeat(3,1fr); gap: 8px;
+  margin-bottom: 14px;
+}
+.cam-qs {
+  background: rgba(12,17,32,0.7);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 8px; text-align: center;
+}
+.cam-qs-v {
+  font-family: var(--font-mono); font-size: 20px; font-weight: 700;
+  color: var(--accent-amber); line-height: 1;
+}
+.cam-qs-l {
+  font-family: var(--font-display); font-size: 9px; font-weight: 700;
+  letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--text-muted); margin-top: 4px;
+}
+.cam-actions { display: flex; gap: 8px; }
+.cam-actions .btn-primary, .cam-actions .btn-ghost {
+  flex: 1; font-size: 11px; padding: 7px 12px; justify-content: center;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-container">
+
+  <div class="page-header" style="margin-bottom:22px;">
+    <div>
+      <div class="page-title">Multi-Camera Overview</div>
+      <div class="page-subtitle">Monitor and manage all configured cameras</div>
+    </div>
+  </div>
+
+  <div class="cameras-grid">
+    {% for cam_id, info in camera_statuses.items() %}
+    {% set s = info.stream %}
+    {% set d = info.detection %}
+    {% set cfg = info.config %}
+    <div class="cam-card {% if d.active %}detecting{% elif s.connected %}connected{% endif %}"
+         id="card-{{ cam_id }}">
+
+      <!-- Thumbnail / MJPEG preview -->
+      <div class="cam-thumb">
+        <img src="{{ url_for('admin_camera_feed', cam_id=cam_id) }}"
+             alt="{{ cfg.label }}"
+             onerror="setTimeout(()=>{ this.src=this.src.split('?')[0]+'?t='+Date.now(); }, 2000)">
+
+        <div class="cam-thumb-badge">
+          <span class="cam-badge-pill {% if s.connected %}online{% else %}offline{% endif %}"
+                id="pill-cam-{{ cam_id }}">
+            <span class="cam-badge-dot"
+                  style="background:{% if s.connected %}var(--accent-green){% else %}var(--accent-red){% endif %};"></span>
+            <span id="pill-cam-txt-{{ cam_id }}">{% if s.connected %}LIVE · {{ s.width }}×{{ s.height }}{% else %}OFFLINE{% endif %}</span>
+          </span>
+          {% if d.active %}
+          <span class="cam-badge-pill detecting" id="pill-det-{{ cam_id }}">
+            <span class="cam-badge-dot" style="background:var(--accent-amber); animation:blink 1.2s infinite;"></span>
+            Detecting
+          </span>
+          {% else %}
+          <span class="cam-badge-pill" id="pill-det-{{ cam_id }}" style="display:none;">
+            <span class="cam-badge-dot" style="background:var(--accent-amber); animation:blink 1.2s infinite;"></span>
+            Detecting
+          </span>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="cam-info">
+        <div class="cam-label">{{ cfg.label }}</div>
+
+        <div class="cam-quick-stats">
+          <div class="cam-qs">
+            <div class="cam-qs-v" id="qs-viol-{{ cam_id }}">{{ d.session_violations }}</div>
+            <div class="cam-qs-l">Session Violations</div>
+          </div>
+          <div class="cam-qs">
+            <div class="cam-qs-v" id="qs-fps-{{ cam_id }}">{{ s.fps if s.connected else '—' }}</div>
+            <div class="cam-qs-l">FPS</div>
+          </div>
+          <div class="cam-qs">
+            <div class="cam-qs-v" id="qs-ped-{{ cam_id }}">{{ d.ped_total }}</div>
+            <div class="cam-qs-l">Pedestrians</div>
+          </div>
+        </div>
+
+        <div class="cam-actions">
+          <a href="{{ url_for('admin_camera_detail', cam_id=cam_id) }}" class="btn-primary btn-sm"
+             style="display:flex; align-items:center; gap:6px; text-decoration:none; justify-content:center; flex:1;">
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+              <polygon points="2,1 9,5 2,9" fill="currentColor"/>
+            </svg>
+            Open Camera
+          </a>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function(){
+  "use strict";
+  // Poll each camera status every 4 s
+  var camIds = {{ camera_statuses.keys()|list|tojson }};
+
+  function pollAll() {
+    camIds.forEach(function(cid) {
+      Promise.all([
+        fetch("/admin/cameras/" + cid + "/status").then(function(r){return r.json();}),
+        fetch("/admin/cameras/" + cid + "/detection/status").then(function(r){return r.json();})
+      ]).then(function(data) {
+        var s = data[0], d = data[1];
+        var card = document.getElementById("card-" + cid);
+        var pillCam = document.getElementById("pill-cam-" + cid);
+        var pillTxt = document.getElementById("pill-cam-txt-" + cid);
+        var pillDet = document.getElementById("pill-det-" + cid);
+
+        // Camera status pill
+        if (s.connected) {
+          pillCam.className = "cam-badge-pill online";
+          pillCam.querySelector(".cam-badge-dot").style.background = "var(--accent-green)";
+          pillTxt.textContent = "LIVE · " + s.width + "×" + s.height;
+        } else {
+          pillCam.className = "cam-badge-pill offline";
+          pillCam.querySelector(".cam-badge-dot").style.background = "var(--accent-red)";
+          pillTxt.textContent = "OFFLINE";
+        }
+
+        // Detection pill
+        pillDet.style.display = d.active ? "inline-flex" : "none";
+
+        // Card border class
+        if (card) {
+          card.className = "cam-card" + (d.active ? " detecting" : (s.connected ? " connected" : ""));
+        }
+
+        // Stats
+        var qv = document.getElementById("qs-viol-" + cid);
+        var qf = document.getElementById("qs-fps-"  + cid);
+        var qp = document.getElementById("qs-ped-"  + cid);
+        if (qv) qv.textContent = d.session_violations || 0;
+        if (qf) qf.textContent = s.connected ? (s.fps || "0") : "—";
+        if (qp) qp.textContent = d.ped_total || 0;
+      }).catch(function(){});
+    });
+  }
+
+  pollAll();
+  setInterval(pollAll, 4000);
+})();
+</script>
+{% endblock %}

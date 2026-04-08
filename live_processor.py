@@ -46,6 +46,13 @@ _POLYGON_PATH = Path(__file__).parent / "crosswalk_polygon.json"
 _SNAPSHOTS    = Path(__file__).parent / "static" / "snapshots"
 
 
+def _polygon_path_for(cam_id: str) -> Path:
+    """Return the per-camera polygon file path."""
+    if cam_id in ("default", "cam2"):
+        return _POLYGON_PATH
+    return Path(__file__).parent / f"crosswalk_polygon_{cam_id}.json"
+
+
 def _draw_zone_overlay(frame: np.ndarray, polygon: np.ndarray, color, alpha: float = 0.15) -> None:
     """Identical to main.py draw_zone_overlay."""
     overlay = frame.copy()
@@ -60,10 +67,11 @@ _draw_zone = _draw_zone_overlay
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def _load_polygon_from_disk() -> Optional[np.ndarray]:
-    if _POLYGON_PATH.exists():
+def _load_polygon_from_disk(path: Optional[Path] = None) -> Optional[np.ndarray]:
+    p = path if path is not None else _POLYGON_PATH
+    if p.exists():
         try:
-            pts = json.loads(_POLYGON_PATH.read_text())
+            pts = json.loads(p.read_text())
             if not isinstance(pts, list) or len(pts) < 4:
                 return None
             return np.array(pts, dtype=np.int32)
@@ -109,7 +117,9 @@ class LiveProcessor:
     JPEG back to camera_manager for MJPEG serving.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, cam_id: str = "default") -> None:
+        self._cam_id    = cam_id
+        self._poly_path = _polygon_path_for(cam_id)
         self._running  = False
         self._starting = False
         self._thread: Optional[threading.Thread] = None
@@ -139,6 +149,13 @@ class LiveProcessor:
         self._stabilizer_enabled = os.getenv("LIVE_ENABLE_STABILIZATION", "1") != "0"
         self._stabilizer_initialized = False
 
+        # ── Plate detection ───────────────────────────────────────────────────
+        self._plate_detector = None
+        self._plate_bbox_cache: Dict[int, tuple] = {}   # obj_id -> (fx1,fy1,fx2,fy2) in frame coords
+        self._ocr_engine    = None
+        self._plate_text_cache:  Dict[int, str] = {}   # obj_id -> detected plate text
+        self._plate_ocr_pending: Set[int] = set()       # obj_ids currently being OCR'd
+
         # ── Tracking state ────────────────────────────────────────────────────
         self._ped_tracks:         Dict = {}
         self._veh_tracks:         Dict = {}
@@ -146,6 +163,10 @@ class LiveProcessor:
         self._active_viol_cars:   Set[int] = set()
         self._triggered_pairs:    Set[tuple] = set()
         self._frame_index = 0
+        # Frame-skip bookkeeping (fully initialised here so _loop never hits AttributeError)
+        self._skip_counter = 0
+        self._last_boxes   = None   # (boxes, classes, ids, confs) cache for inter-frame draw
+        self._detect_every = 1
 
     # ── Public API ─────────────────────────────────────────────────────────────
 
@@ -188,6 +209,10 @@ class LiveProcessor:
             self._starting = True
             self.last_error = ""
 
+        # Load the polygon synchronously so get_stats() reflects it immediately
+        # (the route returns before the background thread finishes loading the model)
+        self.reload_polygon()
+
         def _worker() -> None:
             try:
                 self._start_blocking()
@@ -203,15 +228,19 @@ class LiveProcessor:
         self._running = False
         self._starting = False
         # Import here to avoid circular import at module load time
-        from stream import camera_manager
-        camera_manager.clear_annotated()
-        print("[LiveProcessor] Detection stopped.")
+        if self._cam_id == "default":
+            from stream import camera_manager
+            camera_manager.clear_annotated()
+        else:
+            from stream import registry
+            registry.get(self._cam_id).clear_annotated()
+        print(f"[LiveProcessor:{self._cam_id}] Detection stopped.")
 
     def reload_polygon(self) -> None:
         """Re-read polygon from disk (called after user saves a new polygon)."""
         from geometry.crosswalk import CrosswalkZone
 
-        poly = _load_polygon_from_disk()
+        poly = _load_polygon_from_disk(self._poly_path)
         with self._lock:
             self._polygon = poly
             self._crosswalk = None
@@ -264,6 +293,25 @@ class LiveProcessor:
         )
         self._pipeline  = EnforcementPipeline(cfg)
         self._id_merger = IDMerger(proximity_px=40.0, min_frames=3)
+
+        # ── Plate detector (uses custom YOLO model or Haar fallback) ──────────
+        try:
+            from alpr.detector import LicensePlateDetector
+            self._plate_detector = LicensePlateDetector(cfg)
+            model_type = "custom YOLO" if self._plate_detector._detector is not None else "Haar cascade"
+            print(f"[LiveProcessor:{self._cam_id}] Plate detector ready ({model_type})")
+        except Exception as exc:
+            print(f"[LiveProcessor:{self._cam_id}] Plate detector unavailable: {exc}")
+            self._plate_detector = None
+
+        # ── OCR engine ────────────────────────────────────────────────────────
+        try:
+            from OCR.engine import OCREngine
+            self._ocr_engine = OCREngine(cfg)
+            print(f"[LiveProcessor:{self._cam_id}] OCR engine ready ({cfg.models.ocr_backend})")
+        except Exception as exc:
+            print(f"[LiveProcessor:{self._cam_id}] OCR engine unavailable: {exc}")
+            self._ocr_engine = None
         self._split_ratio = cfg.runtime.split_ratio
         self._stabilizer = VideoStabilizer() if self._stabilizer_enabled else None
         self._stabilizer_initialized = False
@@ -276,6 +324,9 @@ class LiveProcessor:
         self._vehicles_in_polygon.clear()
         self._active_viol_cars.clear()
         self._triggered_pairs.clear()
+        self._plate_bbox_cache.clear()
+        self._plate_text_cache.clear()
+        self._plate_ocr_pending.clear()
         self._frame_index = 0
         self.ped_total = self.veh_total = 0
         self.ped_in_zone = self.veh_in_zone = 0
@@ -287,9 +338,13 @@ class LiveProcessor:
         self._skip_counter = 0
 
     def _loop(self) -> None:
-        from stream import camera_manager
+        if self._cam_id == "default":
+            from stream import camera_manager as cam_stream
+        else:
+            from stream import registry
+            cam_stream = registry.get(self._cam_id)
         while self._running:
-            raw = camera_manager.get_numpy()
+            raw = cam_stream.get_numpy()
             if raw is None:
                 time.sleep(0.010)
                 continue
@@ -299,11 +354,11 @@ class LiveProcessor:
                 annotated = self._process(raw, run_detect=run_detect)
             except Exception as exc:
                 import traceback
-                print(f"[LiveProcessor] Frame error: {exc}")
+                print(f"[LiveProcessor:{self._cam_id}] Frame error: {exc}")
                 traceback.print_exc()
                 annotated = raw
             _, buf = cv2.imencode(".jpg", annotated, [cv2.IMWRITE_JPEG_QUALITY, 82])
-            camera_manager.set_annotated_jpeg(buf.tobytes())
+            cam_stream.set_annotated_jpeg(buf.tobytes())
 
     # ── Frame processing ───────────────────────────────────────────────────────
 
@@ -336,13 +391,8 @@ class LiveProcessor:
             upper_poly = self._upper_poly
             lower_poly = self._lower_poly
 
-        # ── Draw polygon zone — identical to main.py ──────────────────────────
-        if polygon is not None and crosswalk is not None:
-            crosswalk.draw(frame)
-            crosswalk.draw_half_split(frame, ratio=self._split_ratio)
-            if upper_poly is not None and lower_poly is not None:
-                _draw_zone_overlay(frame, upper_poly, (255, 0, 0), alpha=0.15)
-                _draw_zone_overlay(frame, lower_poly, (0, 255, 0), alpha=0.15)
+        # ── Compute polygon geometry (needed by track logic below) ────────────
+        if polygon is not None:
             np_poly = polygon.astype(np.float32)
             pw      = float(np_poly[:, 0].max() - np_poly[:, 0].min())
             ph      = float(np_poly[:, 1].max() - np_poly[:, 1].min())
@@ -352,6 +402,22 @@ class LiveProcessor:
             np_poly = None
             d_axis  = "from_bottom"
             d_mid   = h / 2.0
+
+        # ── Run YOLO on the CLEAN frame — mirrors main.py exactly ─────────────
+        # Detection MUST happen before any drawing so the model sees unmodified
+        # pixels.  The previous order fed polygon lines/zone-colour overlays into
+        # YOLO, which confused the detector → fewer valid track IDs returned →
+        # the early-return path fired every frame → annotated_jpeg was never
+        # updated → the MJPEG feed froze on dark/placeholder content.
+        results = self._detector.detect(frame) if (self._detector and run_detect) else None
+
+        # ── Draw polygon zone overlay (AFTER detection, same order as main.py) ─
+        if polygon is not None and crosswalk is not None:
+            crosswalk.draw(frame)
+            crosswalk.draw_half_split(frame, ratio=self._split_ratio)
+            if upper_poly is not None and lower_poly is not None:
+                _draw_zone_overlay(frame, upper_poly, (255, 0, 0), alpha=0.15)
+                _draw_zone_overlay(frame, lower_poly, (0, 255, 0), alpha=0.15)
 
         # ── Stabilizer label — mirrors main.py ────────────────────────────────
         if self._stabilizer is not None:
@@ -371,8 +437,7 @@ class LiveProcessor:
             2,
         )
 
-        # ── Run detection ── ─────────────────────────────────────────────────
-        results = self._detector.detect(frame) if (self._detector and run_detect) else None
+        # ── No detections or ByteTrack not yet tracking ───────────────────────
         if not results or results[0].boxes.id is None:
             # On skipped frames draw last known boxes (keeps the feed smooth)
             if self._last_boxes is not None and not run_detect:
@@ -467,6 +532,9 @@ class LiveProcessor:
             if gone_id not in cur_veh:
                 self._triggered_pairs -= {p for p in self._triggered_pairs if p[0] == gone_id}
                 self._active_viol_cars.discard(gone_id)
+                self._plate_bbox_cache.pop(gone_id, None)
+                self._plate_text_cache.pop(gone_id, None)
+                self._plate_ocr_pending.discard(gone_id)
                 del self._veh_tracks[gone_id]
 
         # ── Second pass: violation checks + drawing — mirrors main.py ─────────
@@ -506,11 +574,20 @@ class LiveProcessor:
             obj_class       = "person" if cls == 0 else "vehicle"
             violation_active = cls != 0 and obj_id in self._active_viol_cars
 
-            box_color = (
-                _RED    if violation_active
-                else _YELLOW if (cls != 0 and obj_id in self._vehicles_in_polygon)
-                else _GREEN
-            )
+            if cls == 0:  # pedestrian: state-based colour
+                pt_draw = self._ped_tracks.get(obj_id)
+                ped_state = pt_draw.state if pt_draw else "OUTSIDE"
+                box_color = (
+                    _YELLOW if ped_state == "CROSSING"
+                    else _AMBER  if ped_state in ("ENTERING", "CLEARING")
+                    else _GREEN
+                )
+            else:  # vehicle
+                box_color = (
+                    _RED    if violation_active
+                    else _YELLOW if obj_id in self._vehicles_in_polygon
+                    else _GREEN
+                )
             draw_box(frame, box, obj_class, box_color)
 
             if cls == 0:
@@ -539,6 +616,65 @@ class LiveProcessor:
                         cv2.FONT_HERSHEY_SIMPLEX, 0.9, _RED, 2,
                     )
 
+                # ── Plate detection + OCR overlay ─────────────────────────────
+                if run_detect and self._plate_detector is not None:
+                    x1i, y1i, x2i, y2i = int(x1), int(y1), int(x2), int(y2)
+                    x1c = max(0, x1i); y1c = max(0, y1i)
+                    x2c = min(w - 1, x2i); y2c = min(h - 1, y2i)
+                    if (x2c - x1c) >= 32 and (y2c - y1c) >= 32:
+                        try:
+                            crop = frame[y1c:y2c, x1c:x2c]
+                            pbbox, _pconf = self._plate_detector._best_box(crop)
+                            if pbbox is not None:
+                                px1, py1, px2, py2 = pbbox
+                                frame_coords = (
+                                    x1c + px1, y1c + py1, x1c + px2, y1c + py2,
+                                )
+                                self._plate_bbox_cache[obj_id] = frame_coords
+
+                                # Launch OCR once per vehicle ID (async, non-blocking)
+                                if (
+                                    self._ocr_engine is not None
+                                    and obj_id not in self._plate_ocr_pending
+                                    and obj_id not in self._plate_text_cache
+                                ):
+                                    ppx1o = max(0, int(x1c + px1))
+                                    ppy1o = max(0, int(y1c + py1))
+                                    ppx2o = min(w - 1, int(x1c + px2))
+                                    ppy2o = min(h - 1, int(y1c + py2))
+                                    if ppx2o - ppx1o > 8 and ppy2o - ppy1o > 8:
+                                        plate_crop_img = frame[ppy1o:ppy2o, ppx1o:ppx2o].copy()
+                                        self._plate_ocr_pending.add(obj_id)
+                                        import threading as _t
+                                        _t.Thread(
+                                            target=self._run_ocr_for_vehicle,
+                                            args=(obj_id, plate_crop_img),
+                                            daemon=True,
+                                        ).start()
+                            else:
+                                self._plate_bbox_cache.pop(obj_id, None)
+                        except Exception:
+                            pass
+
+                plate_box  = self._plate_bbox_cache.get(obj_id)
+                plate_text = self._plate_text_cache.get(obj_id)
+                if plate_box is not None:
+                    ppx1, ppy1, ppx2, ppy2 = [int(v) for v in plate_box]
+                    cv2.rectangle(frame, (ppx1, ppy1), (ppx2, ppy2), (0, 255, 255), 2)
+                    if plate_text:
+                        label = plate_text
+                        color = (0, 240, 60) if not plate_text.startswith("~") else (0, 200, 255)
+                    elif obj_id in self._plate_ocr_pending:
+                        label = "OCR..."
+                        color = (100, 200, 255)
+                    else:
+                        label = "PLATE"
+                        color = (0, 255, 255)
+                    cv2.putText(
+                        frame, label, (ppx1, ppy1 - 4),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.45, color, 1,
+                    )
+
         # ── Update live stats ─────────────────────────────────────────────────
         ped_in_zone = sum(
             1 for pid, pt in self._ped_tracks.items()
@@ -562,14 +698,59 @@ class LiveProcessor:
         for box, cls, obj_id in zip(boxes, classes, ids):
             obj_id = int(obj_id)
             obj_class = "person" if cls == 0 else "vehicle"
-            viol = cls != 0 and obj_id in self._active_viol_cars
-            zone = cls != 0 and obj_id in self._vehicles_in_polygon
-            color = _RED if viol else _YELLOW if zone else _GREEN
+            if cls == 0:
+                pt_draw = self._ped_tracks.get(obj_id)
+                ped_state = pt_draw.state if pt_draw else "OUTSIDE"
+                color = (
+                    _YELLOW if ped_state == "CROSSING"
+                    else _AMBER  if ped_state in ("ENTERING", "CLEARING")
+                    else _GREEN
+                )
+            else:
+                viol = obj_id in self._active_viol_cars
+                zone = obj_id in self._vehicles_in_polygon
+                color = _RED if viol else _YELLOW if zone else _GREEN
             draw_box(frame, box, obj_class, color)
+            # Plate overlay from cache on skipped frames
+            if cls != 0:
+                plate_box  = self._plate_bbox_cache.get(obj_id)
+                plate_text = self._plate_text_cache.get(obj_id)
+                if plate_box is not None:
+                    ppx1, ppy1, ppx2, ppy2 = [int(v) for v in plate_box]
+                    cv2.rectangle(frame, (ppx1, ppy1), (ppx2, ppy2), (0, 255, 255), 2)
+                    label = plate_text if plate_text else ("OCR..." if obj_id in self._plate_ocr_pending else "PLATE")
+                    color = (0, 240, 60) if plate_text and not plate_text.startswith("~") else (0, 200, 255)
+                    cv2.putText(frame, label, (ppx1, ppy1 - 4),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.45, color, 1)
 
     def _draw_hud(self, frame: np.ndarray) -> None:
         """Kept for backward compatibility; logic now inlined in _process."""
         pass
+
+    def _run_ocr_for_vehicle(self, obj_id: int, plate_crop: np.ndarray) -> None:
+        """Run OCR on plate crop in a background thread; cache result in _plate_text_cache."""
+        import tempfile
+        import os as _os
+        tmp_path = None
+        try:
+            tmp = tempfile.NamedTemporaryFile(suffix=".jpg", delete=False)
+            cv2.imwrite(tmp.name, plate_crop)
+            tmp.close()
+            tmp_path = tmp.name
+            result = self._ocr_engine.recognize(tmp_path)
+            if result.plate_text:
+                self._plate_text_cache[obj_id] = result.plate_text
+            elif result.raw_text and len(result.raw_text.strip()) >= 3:
+                self._plate_text_cache[obj_id] = f"~{result.raw_text.strip()[:10]}"
+        except Exception:
+            pass
+        finally:
+            self._plate_ocr_pending.discard(obj_id)
+            if tmp_path:
+                try:
+                    _os.unlink(tmp_path)
+                except Exception:
+                    pass
 
     def _submit_violation(self, frame, vbox, np_poly, vt, pt, violation,
                             all_boxes=None, all_classes=None) -> None:
@@ -580,6 +761,10 @@ class LiveProcessor:
 
         _SNAPSHOTS.mkdir(parents=True, exist_ok=True)
         x1, y1, x2, y2 = [int(v) for v in vbox]
+
+        # Use cached OCR plate if available (only accept confirmed plates, not raw ~ guesses)
+        cached_plate = self._plate_text_cache.get(vt.track_id)
+        clean_plate = cached_plate if (cached_plate and not cached_plate.startswith("~")) else None
 
         event = ViolationEvent.create(
             vehicle_id=vt.track_id,
@@ -594,6 +779,7 @@ class LiveProcessor:
             violation_type=violation.violation_type,
             severity=violation.severity,
             vehicle_speed_estimate=_speed(vt),
+            plate_number=clean_plate,
         )
 
         # ── Annotated snapshot — exact copy of main.py _save_violation_snapshot
@@ -621,7 +807,7 @@ class LiveProcessor:
 
             # Text overlay inside banner (same as main.py)
             ts = event.timestamp.strftime("%Y-%m-%d %H:%M:%S")
-            plate_str = getattr(event, "plate_number", None) or "UNDETECTED"
+            plate_str = event.plate_number or "CHECKING..."
             lines = [
                 "VIOLATION DETECTED",
                 f"Type: {violation.violation_type}",
@@ -640,6 +826,22 @@ class LiveProcessor:
             fname = f"snapshot_{event.violation_id}_{self._frame_index}.jpg"
             cv2.imwrite(str(_SNAPSHOTS / fname), snap)
             event.snapshot_path = f"snapshots/{fname}"
+
+            # Save plate crop if we have a cached detection for this vehicle
+            plate_bbox_frame = self._plate_bbox_cache.get(vt.track_id)
+            if plate_bbox_frame is not None:
+                try:
+                    fh_f, fw_f = frame.shape[:2]
+                    ppx1, ppy1, ppx2, ppy2 = plate_bbox_frame
+                    ppx1 = max(0, ppx1); ppy1 = max(0, ppy1)
+                    ppx2 = min(fw_f - 1, ppx2); ppy2 = min(fh_f - 1, ppy2)
+                    if ppx2 > ppx1 and ppy2 > ppy1:
+                        plate_crop = frame[ppy1:ppy2, ppx1:ppx2]
+                        plate_fname = f"plate_{event.violation_id}.jpg"
+                        cv2.imwrite(str(_SNAPSHOTS / plate_fname), plate_crop)
+                        print(f"[LiveProcessor] Plate crop saved: {plate_fname}")
+                except Exception as exc:
+                    print(f"[LiveProcessor] Plate crop save failed: {exc}")
         except Exception as exc:
             print(f"[LiveProcessor] Snapshot failed: {exc}")
 
@@ -650,5 +852,28 @@ class LiveProcessor:
             ).start()
 
 
-# ── Module-level singleton ────────────────────────────────────────────────────
+# ── LiveProcessorRegistry ────────────────────────────────────────────────────
+
+class LiveProcessorRegistry:
+    """Manages one LiveProcessor per camera ID (lazy init)."""
+
+    def __init__(self) -> None:
+        self._procs: dict[str, LiveProcessor] = {}
+        self._lock = threading.Lock()
+
+    def get(self, cam_id: str) -> LiveProcessor:
+        with self._lock:
+            if cam_id not in self._procs:
+                self._procs[cam_id] = LiveProcessor(cam_id=cam_id)
+            return self._procs[cam_id]
+
+    def statuses(self) -> dict:
+        with self._lock:
+            return {cid: proc.get_stats() for cid, proc in self._procs.items()}
+
+
+proc_registry = LiveProcessorRegistry()
+
+
+# ── Module-level singleton (backward compat for existing /admin/live routes) ─
 live_proc = LiveProcessor()

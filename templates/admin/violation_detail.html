@@ -9,7 +9,9 @@
 <div class="page-container">
 
   <div class="page-header" style="display:flex; align-items:center; gap:16px;">
-    <a href="{{ url_for('admin_violations') }}" class="btn-ghost btn-sm">&larr; Back</a>
+    <a href="{{ url_for('admin_violations') }}" class="btn-circle-link">
+      <span class="c-arrow">←</span> Back to Log
+    </a>
     <div>
       <div class="page-title">
         {{ (violation.violation_type or 'VIOLATION').replace('_',' ') }}
@@ -195,19 +197,31 @@
                     border:1px solid var(--border); background:var(--bg-elevated);">
         </div>
         {% if yandex_maps_key %}
-        <script src="https://enterprise.api-maps.yandex.ru/2.1/?apikey={{ yandex_maps_key }}&lang=en_US"></script>
         <script>
-          ymaps.ready(function(){
-            var m = new ymaps.Map("detail-map",{
-              center:[{{ violation.latitude }},{{ violation.longitude }}],
-              zoom:17, type:"yandex#satellite"
-            });
-            m.geoObjects.add(new ymaps.Placemark(
-              [{{ violation.latitude }},{{ violation.longitude }}],
-              { balloonContent:"{{ violation.display_location|e }}" },
-              { preset:"islands#redCircleDotIcon" }
-            ));
-          });
+          (function(){
+            var s = document.createElement('script');
+            s.src = 'https://api-maps.yandex.ru/2.1/?apikey={{ yandex_maps_key }}&lang=en_US';
+            s.onload = function(){
+              ymaps.ready(function(){
+                var m = new ymaps.Map("detail-map",{
+                  center:[{{ violation.latitude }},{{ violation.longitude }}],
+                  zoom:17, type:"yandex#satellite",
+                  controls:["zoomControl","typeSelector"]
+                });
+                m.geoObjects.add(new ymaps.Placemark(
+                  [{{ violation.latitude }},{{ violation.longitude }}],
+                  { balloonContent:"{{ violation.display_location|e }}",
+                    hintContent:"{{ (violation.violation_type or '')|e }}" },
+                  { preset:"islands#redCircleDotIcon" }
+                ));
+                m.geoObjects.add(new ymaps.Circle(
+                  [[{{ violation.latitude }},{{ violation.longitude }}], 35], {},
+                  { fillColor:"F5A62320", strokeColor:"F5A623", strokeWidth:2 }
+                ));
+              });
+            };
+            document.head.appendChild(s);
+          })();
         </script>
         {% else %}
         <div style="font-family:var(--font-mono); font-size:11px; color:var(--text-muted); margin-top:6px;">

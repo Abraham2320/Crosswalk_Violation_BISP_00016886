@@ -1,0 +1,411 @@
+/* ============================================================
+   animations.css — Global animation & motion system
+   Crosswalk Enforcement System — inspired by OneText SaaS UI
+   ============================================================ */
+
+/* ── Keyframe library ──────────────────────────────────────── */
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(22px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.94); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+@keyframes slideLeft {
+  from { opacity: 0; transform: translateX(-18px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes scanSweep {
+  0%   { top: 0;    opacity: 0; }
+  6%   { opacity: 1; }
+  94%  { opacity: 1; }
+  100% { top: 100%; opacity: 0; }
+}
+
+@keyframes bracketAppear {
+  from { opacity: 0; transform: scale(0); }
+  to   { opacity: 0.75; transform: scale(1); }
+}
+
+@keyframes orbitSpin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+@keyframes navBarIn {
+  from { opacity: 0; transform: translateY(-12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes glowPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(245,166,35,0); }
+  50%       { box-shadow: 0 0 20px 3px rgba(245,166,35,0.12); }
+}
+
+@keyframes numberReveal {
+  from { opacity: 0; transform: translateY(10px) scale(0.9); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes ambientFloat {
+  0%, 100% { transform: rotate(0deg) scale(1); }
+  33%       { transform: rotate(120deg) scale(1.02); }
+  66%       { transform: rotate(240deg) scale(0.98); }
+}
+
+/* ── Ambient background rings (injected in base.html) ────── */
+
+.ambient-bg {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+}
+
+.ambient-ring {
+  position: absolute;
+  border-radius: 50%;
+  border: 1px solid rgba(245,166,35,0.055);
+}
+
+.ambient-ring-1 {
+  width: 720px; height: 720px;
+  top: -220px; right: -220px;
+  border-color: rgba(245,166,35,0.05);
+  animation: orbitSpin 65s linear infinite;
+}
+
+.ambient-ring-1::after {
+  content: '';
+  position: absolute;
+  top: 50px; left: 50px; right: 50px; bottom: 50px;
+  border-radius: 50%;
+  border: 1px solid rgba(245,166,35,0.03);
+}
+
+.ambient-ring-2 {
+  width: 520px; height: 520px;
+  bottom: -160px; left: -160px;
+  border-color: rgba(59,130,246,0.045);
+  animation: orbitSpin 90s linear infinite reverse;
+}
+
+.ambient-ring-2::after {
+  content: '';
+  position: absolute;
+  top: 60px; left: 60px; right: 60px; bottom: 60px;
+  border-radius: 50%;
+  border: 1px solid rgba(59,130,246,0.025);
+}
+
+.ambient-ring-3 {
+  width: 260px; height: 260px;
+  top: 55%; left: 48%;
+  border-color: rgba(0,212,140,0.03);
+  animation: orbitSpin 45s linear infinite;
+}
+
+/* Orbital dot on ring-1 */
+.ambient-dot {
+  position: absolute;
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--accent-amber);
+  top: 50%; left: 0;
+  margin-top: -3px; margin-left: -3px;
+  box-shadow: 0 0 8px rgba(245,166,35,0.8);
+  opacity: 0.5;
+}
+
+/* ── Nav bar entry ─────────────────────────────────────────── */
+
+.nav-bar {
+  animation: navBarIn 0.45s cubic-bezier(0.22,1,0.36,1) both;
+}
+
+/* ── Page content entry ────────────────────────────────────── */
+
+.page-container {
+  animation: fadeIn 0.3s ease 0.08s both;
+}
+
+.page-header {
+  animation: fadeUp 0.38s cubic-bezier(0.22,1,0.36,1) 0.06s both;
+}
+
+/* ── Filter bar ────────────────────────────────────────────── */
+
+.filter-bar {
+  animation: fadeUp 0.38s cubic-bezier(0.22,1,0.36,1) 0.1s both;
+}
+
+/* ── Stat card stagger ─────────────────────────────────────── */
+
+.grid-4 > .stat-card,
+.grid-3 > .stat-card,
+.grid-2 > .stat-card {
+  animation: fadeUp 0.48s cubic-bezier(0.22,1,0.36,1) both;
+}
+
+.grid-4 > *:nth-child(1), .grid-3 > *:nth-child(1) { animation-delay: 0.06s; }
+.grid-4 > *:nth-child(2), .grid-3 > *:nth-child(2) { animation-delay: 0.12s; }
+.grid-4 > *:nth-child(3), .grid-3 > *:nth-child(3) { animation-delay: 0.18s; }
+.grid-4 > *:nth-child(4)                            { animation-delay: 0.24s; }
+
+/* ── Main card entry ──────────────────────────────────────── */
+
+.card {
+  animation: scaleIn 0.40s cubic-bezier(0.22,1,0.36,1) 0.1s both;
+}
+
+/* ── Table row stagger ────────────────────────────────────── */
+
+.data-table tbody tr {
+  animation: fadeUp 0.3s ease both;
+}
+.data-table tbody tr:nth-child(1)    { animation-delay: 0.06s; }
+.data-table tbody tr:nth-child(2)    { animation-delay: 0.09s; }
+.data-table tbody tr:nth-child(3)    { animation-delay: 0.12s; }
+.data-table tbody tr:nth-child(4)    { animation-delay: 0.15s; }
+.data-table tbody tr:nth-child(5)    { animation-delay: 0.17s; }
+.data-table tbody tr:nth-child(6)    { animation-delay: 0.19s; }
+.data-table tbody tr:nth-child(7)    { animation-delay: 0.21s; }
+.data-table tbody tr:nth-child(8)    { animation-delay: 0.23s; }
+.data-table tbody tr:nth-child(9)    { animation-delay: 0.25s; }
+.data-table tbody tr:nth-child(10)   { animation-delay: 0.27s; }
+.data-table tbody tr:nth-child(n+11) { animation-delay: 0.30s; }
+
+/* ── Violation log entries ────────────────────────────────── */
+
+.log-entry {
+  animation: slideLeft 0.32s cubic-bezier(0.22,1,0.36,1) both;
+}
+
+/* ── Login card ───────────────────────────────────────────── */
+
+.login-card {
+  animation: scaleIn 0.55s cubic-bezier(0.22,1,0.36,1) both;
+}
+
+/* ── Portal animations ────────────────────────────────────── */
+
+.portal-page .portal-card {
+  animation: scaleIn 0.48s cubic-bezier(0.22,1,0.36,1) 0.1s both;
+}
+
+.portal-steps > .portal-step {
+  animation: fadeUp 0.4s cubic-bezier(0.22,1,0.36,1) both;
+}
+.portal-steps > .portal-step:nth-child(1) { animation-delay: 0.15s; }
+.portal-steps > .portal-step:nth-child(3) { animation-delay: 0.25s; }
+.portal-steps > .portal-step:nth-child(5) { animation-delay: 0.35s; }
+
+.portal-demo-card {
+  animation: fadeUp 0.45s cubic-bezier(0.22,1,0.36,1) 0.3s both;
+}
+
+/* ── Violation cards (portal results) ────────────────────── */
+
+.violation-card.visible {
+  animation: fadeUp 0.4s cubic-bezier(0.22,1,0.36,1) both;
+}
+
+/* ── Scan corner bracket classes (injected via JS) ────────── */
+
+.sc-corner {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  pointer-events: none;
+  z-index: 5;
+  animation: bracketAppear 0.5s cubic-bezier(0.22,1,0.36,1) both;
+  overflow: visible;
+}
+
+.sc-tl {
+  top: 10px; left: 10px;
+  border-top: 2px solid var(--accent-amber);
+  border-left: 2px solid var(--accent-amber);
+  border-radius: 2px 0 0 0;
+  transform-origin: top left;
+  animation-delay: 0.00s;
+  box-shadow: -2px -2px 8px rgba(245,166,35,0.15);
+}
+
+.sc-tr {
+  top: 10px; right: 10px;
+  border-top: 2px solid var(--accent-amber);
+  border-right: 2px solid var(--accent-amber);
+  border-radius: 0 2px 0 0;
+  transform-origin: top right;
+  animation-delay: 0.08s;
+  box-shadow: 2px -2px 8px rgba(245,166,35,0.15);
+}
+
+.sc-br {
+  bottom: 10px; right: 10px;
+  border-bottom: 2px solid var(--accent-amber);
+  border-right: 2px solid var(--accent-amber);
+  border-radius: 0 0 2px 0;
+  transform-origin: bottom right;
+  animation-delay: 0.16s;
+  box-shadow: 2px 2px 8px rgba(245,166,35,0.15);
+}
+
+.sc-bl {
+  bottom: 10px; left: 10px;
+  border-bottom: 2px solid var(--accent-amber);
+  border-left: 2px solid var(--accent-amber);
+  border-radius: 0 0 0 2px;
+  transform-origin: bottom left;
+  animation-delay: 0.24s;
+  box-shadow: -2px 2px 8px rgba(245,166,35,0.15);
+}
+
+/* Hover: brackets become fully opaque */
+.stat-card:hover .sc-corner,
+.login-card:hover .sc-corner,
+.snapshot-container:hover .sc-corner {
+  opacity: 1 !important;
+}
+
+/* ── Scan line (dynamically appended to .video-wrap.detecting) */
+
+.scan-line {
+  position: absolute;
+  left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(245,166,35,0.9) 50%,
+    transparent 100%
+  );
+  box-shadow:
+    0 0 14px rgba(245,166,35,0.6),
+    0 0 4px  rgba(245,166,35,1);
+  pointer-events: none;
+  z-index: 4;
+  animation: scanSweep 2.8s linear infinite;
+  top: 0;
+}
+
+/* ── Circle-arrow button (OneText-style navigation CTA) ───── */
+
+.btn-circle-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--accent-amber);
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-decoration: none;
+  transition: gap 160ms ease;
+}
+
+.btn-circle-link .c-arrow {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  background: var(--accent-amber);
+  color: #06080E;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 14px;
+  font-weight: 700;
+  transition: transform 160ms ease, box-shadow 160ms ease;
+}
+
+.btn-circle-link:hover {
+  gap: 14px;
+  text-decoration: none;
+  color: var(--accent-amber);
+}
+
+.btn-circle-link:hover .c-arrow {
+  transform: translateX(4px);
+  box-shadow: 0 0 16px rgba(245,166,35,0.5);
+}
+
+/* ── Stat value number reveal ──────────────────────────────── */
+
+.stat-value {
+  animation: numberReveal 0.5s cubic-bezier(0.22,1,0.36,1) 0.3s both;
+}
+
+/* ── Detail layout stagger ────────────────────────────────── */
+
+.detail-layout > *:nth-child(1) {
+  animation: fadeUp 0.4s cubic-bezier(0.22,1,0.36,1) 0.1s both;
+}
+.detail-layout > *:nth-child(2) {
+  animation: fadeUp 0.4s cubic-bezier(0.22,1,0.36,1) 0.18s both;
+}
+
+/* ── Heatmap cells animate in ─────────────────────────────── */
+
+.heatmap-cell {
+  animation: scaleIn 0.25s ease both;
+}
+.heatmap-grid > *:nth-child(6n+1) { animation-delay: 0.02s; }
+.heatmap-grid > *:nth-child(6n+2) { animation-delay: 0.04s; }
+.heatmap-grid > *:nth-child(6n+3) { animation-delay: 0.06s; }
+.heatmap-grid > *:nth-child(6n+4) { animation-delay: 0.08s; }
+.heatmap-grid > *:nth-child(6n+5) { animation-delay: 0.10s; }
+.heatmap-grid > *:nth-child(6n+6) { animation-delay: 0.12s; }
+
+/* ── Glow pulse on stat cards ─────────────────────────────── */
+
+.stat-card {
+  animation: glowPulse 4s ease-in-out infinite;
+}
+
+/* ── Snapshot image reveal with scan effect ───────────────── */
+
+.snapshot-img {
+  animation: fadeIn 0.6s ease 0.2s both;
+}
+
+/* ── Inline/live stats slide-in ───────────────────────────── */
+
+.qs-item {
+  animation: fadeUp 0.4s cubic-bezier(0.22,1,0.36,1) both;
+}
+.quick-stats > .qs-item:nth-child(1) { animation-delay: 0.06s; }
+.quick-stats > .qs-item:nth-child(2) { animation-delay: 0.12s; }
+.quick-stats > .qs-item:nth-child(3) { animation-delay: 0.18s; }
+
+.module-item {
+  animation: fadeUp 0.4s cubic-bezier(0.22,1,0.36,1) both;
+}
+.module-strip > .module-item:nth-child(1) { animation-delay: 0.05s; }
+.module-strip > .module-item:nth-child(2) { animation-delay: 0.10s; }
+.module-strip > .module-item:nth-child(3) { animation-delay: 0.15s; }
+.module-strip > .module-item:nth-child(4) { animation-delay: 0.20s; }
+.module-strip > .module-item:nth-child(5) { animation-delay: 0.25s; }
+
+/* ── Respect prefers-reduced-motion ───────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration:       0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration:      0.001ms !important;
+  }
+}

@@ -4,16 +4,16 @@
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
 <style>
-/* ── Layout ─────────────────────────────────────────────────────────────── */
+/* ── Layout ───────────────────────────────────────────────────────────── */
 .live-grid {
   display: grid;
-  grid-template-columns: 1fr 380px;
+  grid-template-columns: 1fr 400px;
   gap: 20px;
   align-items: start;
 }
 @media (max-width: 1100px) { .live-grid { grid-template-columns: 1fr; } }
 
-/* ── Video container ─────────────────────────────────────────────────────── */
+/* ── Video container ──────────────────────────────────────────────────── */
 .video-wrap {
   position: relative;
   background: #000;
@@ -21,6 +21,12 @@
   border-radius: var(--radius-lg);
   overflow: hidden;
   aspect-ratio: 16/9;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.6);
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+.video-wrap.detecting {
+  border-color: rgba(245,166,35,0.4);
+  box-shadow: 0 8px 40px rgba(0,0,0,0.6), 0 0 0 1px rgba(245,166,35,0.1);
 }
 .video-wrap img {
   width: 100%; height: 100%;
@@ -39,121 +45,297 @@
   z-index: 3;
 }
 
-/* ── Overlay badges ──────────────────────────────────────────────────────── */
+/* ── Corner brackets on the video ────────────────────────────────────── */
+.video-wrap::before,
+.video-wrap::after {
+  content: '';
+  position: absolute;
+  z-index: 2;
+  width: 22px; height: 22px;
+  pointer-events: none;
+}
+.video-wrap::before {
+  top: 8px; left: 8px;
+  border-top: 2px solid rgba(245,166,35,0.5);
+  border-left: 2px solid rgba(245,166,35,0.5);
+  border-radius: 2px 0 0 0;
+}
+.video-wrap::after {
+  bottom: 8px; right: 8px;
+  border-bottom: 2px solid rgba(245,166,35,0.5);
+  border-right: 2px solid rgba(245,166,35,0.5);
+  border-radius: 0 0 2px 0;
+}
+
+/* ── Overlay badges ───────────────────────────────────────────────────── */
 .video-overlay {
-  position: absolute; top: 12px; left: 12px;
+  position: absolute; top: 14px; left: 14px;
   display: flex; flex-direction: column; gap: 6px;
   pointer-events: none; z-index: 2;
 }
 .overlay-badge {
-  display: inline-flex; align-items: center; gap: 5px;
-  font-family: var(--font-mono); font-size: 11px;
-  background: rgba(10,10,15,0.8); border: 1px solid var(--border);
-  padding: 3px 8px; border-radius: 2px; backdrop-filter: blur(4px);
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--font-mono); font-size: 10px;
+  background: rgba(6,8,14,0.85);
+  border: 1px solid rgba(255,255,255,0.06);
+  padding: 4px 10px; border-radius: 4px;
+  backdrop-filter: blur(8px);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
-.overlay-badge.online  { border-color: rgba(16,185,129,0.5); color: var(--accent-green); }
-.overlay-badge.offline { border-color: rgba(239,68,68,0.4);  color: var(--accent-red); }
-.overlay-badge.detecting { border-color: rgba(245,158,11,0.6); color: var(--accent-amber); }
+.overlay-badge.online  { border-color: rgba(0,212,140,0.35); color: var(--accent-green); }
+.overlay-badge.offline { border-color: rgba(240,64,64,0.3);  color: var(--accent-red); }
+.overlay-badge.detecting {
+  border-color: rgba(245,166,35,0.45);
+  color: var(--accent-amber);
+  background: rgba(245,166,35,0.08);
+}
 
-/* ── Violation alert ────────────────────────────────────────────────────── */
-@keyframes alertFlash { 0%,100%{opacity:1} 50%{opacity:0.5} }
+/* ── Violation alert ────────────────────────────────────────────────── */
+@keyframes alertFlash { 0%,100%{opacity:1} 50%{opacity:0.65} }
 .violation-alert {
   display: none; position: absolute; bottom: 0; left: 0; right: 0;
-  background: rgba(239,68,68,0.85); padding: 10px 16px;
-  font-family: var(--font-mono); font-size: 13px; font-weight: 500;
-  letter-spacing: 0.06em; text-transform: uppercase; text-align: center;
-  animation: alertFlash 1s ease-in-out infinite; z-index: 4;
+  background: linear-gradient(0deg, rgba(240,64,64,0.95) 0%, rgba(240,64,64,0.8) 100%);
+  padding: 12px 20px;
+  font-family: var(--font-mono); font-size: 12px; font-weight: 700;
+  letter-spacing: 0.12em; text-transform: uppercase; text-align: center;
+  animation: alertFlash 0.9s ease-in-out infinite; z-index: 4;
+  border-top: 1px solid rgba(255,255,255,0.15);
+  text-shadow: 0 1px 6px rgba(0,0,0,0.5);
 }
 .violation-alert.visible { display: block; }
 
-/* ── Stats rows ─────────────────────────────────────────────────────────── */
-.live-stats {
-  display: grid; grid-template-columns: repeat(3, 1fr);
-  gap: 12px; margin-bottom: 12px;
-}
-.det-stats {
+/* ── Module status strip ────────────────────────────────────────────── */
+.module-strip {
+  display: grid;
   grid-template-columns: repeat(5, 1fr);
-  margin-top: 10px;
+  gap: 8px;
+  margin-bottom: 10px;
 }
-.sys-stats {
+.module-item {
+  background: rgba(12,17,32,0.65);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 8px;
+  text-align: center;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  position: relative;
+  overflow: hidden;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+.module-item::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: var(--border);
+  transition: background 0.3s;
+}
+.module-item.ok::before  { background: var(--accent-green); box-shadow: 0 0 6px var(--accent-green); }
+.module-item.fail::before{ background: var(--accent-red);   box-shadow: 0 0 6px var(--accent-red); }
+.module-item.ok   { border-color: rgba(0,212,140,0.2); }
+.module-item.fail { border-color: rgba(240,64,64,0.2); }
+
+.module-value {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-muted);
+  line-height: 1;
+  margin-bottom: 5px;
+  transition: color 0.3s;
+}
+.module-value.ok   { color: var(--accent-green); text-shadow: 0 0 10px rgba(0,212,140,0.4); }
+.module-value.fail { color: var(--accent-red);   text-shadow: 0 0 10px rgba(240,64,64,0.4); }
+
+.module-label {
+  font-family: var(--font-display);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* ── Quick stats row ────────────────────────────────────────────────── */
+.quick-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.qs-item {
+  background: rgba(12,17,32,0.65);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 10px;
+  text-align: center;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+.qs-value {
+  font-family: var(--font-mono);
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--accent-amber);
+  line-height: 1;
+  letter-spacing: -0.01em;
+  text-shadow: 0 0 14px rgba(245,166,35,0.25);
+}
+.qs-label {
+  font-family: var(--font-display);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-top: 5px;
+}
+
+/* ── Detection stats (shown when active) ───────────────────────────── */
+.det-stats-grid {
+  display: grid;
   grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
   margin-top: 10px;
 }
 .mini-stat {
-  background: var(--bg-elevated); border: 1px solid var(--border);
-  border-radius: var(--radius); padding: 10px; text-align: center;
+  background: rgba(12,17,32,0.65);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 11px 8px;
+  text-align: center;
+  transition: border-color 0.2s;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
-.mini-stat.active { border-color: rgba(245,158,11,0.4); }
+.mini-stat.active {
+  border-color: rgba(245,166,35,0.25);
+  background: rgba(245,166,35,0.03);
+}
 .mini-stat-value {
-  font-family: var(--font-mono); font-size: 20px;
-  color: var(--accent-amber); line-height: 1;
+  font-family: var(--font-mono);
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--accent-amber);
+  line-height: 1;
+  text-shadow: 0 0 10px rgba(245,166,35,0.2);
 }
 .mini-stat-label {
-  font-family: var(--font-display); font-size: 10px;
-  letter-spacing: 0.08em; text-transform: uppercase;
-  color: var(--text-muted); margin-top: 4px;
+  font-family: var(--font-display);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-top: 5px;
 }
-.mini-stat-value.ok { color: var(--accent-green); }
-.mini-stat-value.fail { color: var(--accent-red); }
+.mini-stat-value.ok   { color: var(--accent-green); text-shadow: 0 0 10px rgba(0,212,140,0.2); }
+.mini-stat-value.fail { color: var(--accent-red);   text-shadow: 0 0 10px rgba(240,64,64,0.2); }
 
-/* ── Control buttons row ────────────────────────────────────────────────── */
+/* ── Control buttons bar ────────────────────────────────────────────── */
 .ctrl-bar {
-  display: flex; gap: 8px; flex-wrap: wrap;
-  align-items: center; margin-bottom: 12px;
+  display: flex; gap: 7px; flex-wrap: wrap;
+  align-items: center; margin-bottom: 10px;
 }
+.ctrl-bar .btn-primary { font-size: 11px; padding: 7px 14px; gap: 5px; }
+.ctrl-bar .btn-ghost   { font-size: 11px; padding: 7px 12px; gap: 5px; }
+.ctrl-bar .btn-danger  { font-size: 11px; padding: 7px 12px; gap: 5px; }
 
-/* ── Camera source card ─────────────────────────────────────────────────── */
-.camera-control { padding: 18px; }
+/* ── Camera source card ─────────────────────────────────────────────── */
+.camera-control { padding: 20px; }
 .source-row { display: flex; gap: 8px; }
 .source-row .input { flex: 1; }
-.source-presets { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.source-presets { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
 .preset-btn {
-  font-family: var(--font-mono); font-size: 11px;
+  font-family: var(--font-mono); font-size: 10px;
   padding: 4px 10px; border: 1px solid var(--border);
-  border-radius: var(--radius); background: transparent;
-  color: var(--text-muted); cursor: pointer; transition: all var(--transition);
+  border-radius: var(--radius); background: rgba(255,255,255,0.02);
+  color: var(--text-muted); cursor: pointer;
+  transition: border-color var(--transition), color var(--transition), background var(--transition);
+  letter-spacing: 0.04em;
 }
-.preset-btn:hover { border-color: var(--accent-amber); color: var(--accent-amber); }
+.preset-btn:hover {
+  border-color: rgba(245,166,35,0.4);
+  color: var(--accent-amber);
+  background: var(--accent-amber-dim);
+}
 
-/* ── Violation log ──────────────────────────────────────────────────────── */
+/* ── Violation log (right panel) ────────────────────────────────────── */
 .log-wrap {
-  max-height: 340px; overflow-y: auto;
+  max-height: 360px; overflow-y: auto;
   scrollbar-width: thin; scrollbar-color: var(--border) transparent;
 }
 .log-entry {
-  display: flex; align-items: flex-start; gap: 10px;
-  padding: 9px 0; border-bottom: 1px solid rgba(31,41,55,0.5);
+  display: flex; align-items: flex-start; gap: 11px;
+  padding: 10px 0; border-bottom: 1px solid var(--border-subtle);
+  transition: background 0.15s;
 }
 .log-entry:last-child { border-bottom: none; }
+.log-entry:hover { background: rgba(255,255,255,0.015); margin: 0 -12px; padding: 10px 12px; }
 .log-dot { width:8px; height:8px; border-radius:50%; margin-top:4px; flex-shrink:0; }
-.log-dot.high { background: var(--accent-red); }
-.log-dot.low  { background: var(--accent-amber); }
+.log-dot.high {
+  background: var(--accent-red);
+  box-shadow: 0 0 6px rgba(240,64,64,0.6);
+}
+.log-dot.low  {
+  background: var(--accent-amber);
+  box-shadow: 0 0 6px rgba(245,166,35,0.6);
+}
 .log-text { flex:1; }
-.log-plate { font-family:var(--font-mono); font-size:13px; color:var(--accent-amber); }
-.log-meta  { font-family:var(--font-mono); font-size:11px; color:var(--text-muted); margin-top:2px; }
+.log-plate { font-family:var(--font-mono); font-size:13px; color:var(--accent-amber); font-weight:700; letter-spacing:0.08em; }
+.log-meta  { font-family:var(--font-mono); font-size:10px; color:var(--text-muted); margin-top:3px; }
 .log-link  {
-  font-size:11px; color:var(--text-muted); text-decoration:none;
-  margin-left:auto; flex-shrink:0; align-self:center;
+  font-family:var(--font-mono); font-size:10px; color:var(--text-muted);
+  text-decoration:none; margin-left:auto; flex-shrink:0; align-self:center;
+  border:1px solid var(--border); border-radius:3px; padding: 2px 7px;
+  transition: border-color var(--transition), color var(--transition);
+  text-transform: uppercase; letter-spacing: 0.06em;
 }
-.log-link:hover { color:var(--accent-amber); }
+.log-link:hover { color:var(--accent-amber); border-color:rgba(245,166,35,0.4); }
 
-/* ── Polygon editor panel ───────────────────────────────────────────────── */
+/* ── Polygon editor panel ───────────────────────────────────────────── */
 .poly-panel {
-  background: var(--bg-elevated); border: 1px solid rgba(245,158,11,0.3);
-  border-radius: var(--radius); padding: 14px; margin-top: 12px;
-  font-family: var(--font-mono); font-size: 12px;
+  background: rgba(245,166,35,0.04);
+  border: 1px solid rgba(245,166,35,0.2);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-top: 10px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  backdrop-filter: blur(4px);
 }
-.poly-hint { color: var(--text-muted); margin-bottom:10px; line-height:1.6; }
+.poly-hint { color: var(--text-secondary); margin-bottom:12px; line-height:1.7; }
 .poly-hint strong { color: var(--accent-amber); }
+
+/* ── Right panel card title row ─────────────────────────────────────── */
+.panel-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 16px;
+}
+.panel-header .card-title { margin-bottom: 0; }
+.panel-refresh-tag {
+  font-family: var(--font-mono); font-size: 10px;
+  color: var(--text-muted);
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 2px 7px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="page-container">
 
-  <div class="page-header" style="display:flex; align-items:center; justify-content:space-between;">
+  <div class="page-header" style="display:flex; align-items:center; justify-content:space-between; margin-bottom:18px;">
     <div>
-      <div class="page-title">Live Stream</div>
+      <div class="page-title" style="font-size:22px;">
+        <span style="color:var(--accent-amber);">&#9679;</span>&nbsp;Live Command Center
+      </div>
       <div class="page-subtitle">Real-time crosswalk monitoring &amp; violation detection</div>
     </div>
     <div class="live-indicator" id="sys-indicator">
@@ -167,44 +349,45 @@
     <!-- ── Left: video + controls ───────────────────────────────────── -->
     <div>
 
-      <!-- Totals stats row -->
-      <div class="live-stats">
-        <div class="mini-stat">
-          <div class="mini-stat-value" id="ls-total">—</div>
-          <div class="mini-stat-label">Total</div>
+      <!-- Quick stats row -->
+      <div class="quick-stats">
+        <div class="qs-item">
+          <div class="qs-value" id="ls-total">—</div>
+          <div class="qs-label">Total Violations</div>
         </div>
-        <div class="mini-stat">
-          <div class="mini-stat-value" id="ls-today">—</div>
-          <div class="mini-stat-label">Today</div>
+        <div class="qs-item">
+          <div class="qs-value" id="ls-today">—</div>
+          <div class="qs-label">Today</div>
         </div>
-        <div class="mini-stat">
-          <div class="mini-stat-value" id="ls-fps">
+        <div class="qs-item">
+          <div class="qs-value" id="ls-fps">
             {{ camera_status.fps if camera_status.connected else '—' }}
           </div>
-          <div class="mini-stat-label">FPS</div>
+          <div class="qs-label">Live FPS</div>
         </div>
       </div>
 
-      <div class="live-stats sys-stats">
-        <div class="mini-stat">
-          <div class="mini-stat-value" id="chk-yolo">—</div>
-          <div class="mini-stat-label">YOLO</div>
+      <!-- System module status strip -->
+      <div class="module-strip">
+        <div class="module-item" id="mod-yolo">
+          <div class="module-value" id="chk-yolo">—</div>
+          <div class="module-label">YOLO</div>
         </div>
-        <div class="mini-stat">
-          <div class="mini-stat-value" id="chk-cv">—</div>
-          <div class="mini-stat-label">OpenCV</div>
+        <div class="module-item" id="mod-cv">
+          <div class="module-value" id="chk-cv">—</div>
+          <div class="module-label">OpenCV</div>
         </div>
-        <div class="mini-stat">
-          <div class="mini-stat-value" id="chk-orb">—</div>
-          <div class="mini-stat-label">ORB</div>
+        <div class="module-item" id="mod-orb">
+          <div class="module-value" id="chk-orb">—</div>
+          <div class="module-label">ORB</div>
         </div>
-        <div class="mini-stat">
-          <div class="mini-stat-value" id="chk-fsm">—</div>
-          <div class="mini-stat-label">FSM/Rules</div>
+        <div class="module-item" id="mod-fsm">
+          <div class="module-value" id="chk-fsm">—</div>
+          <div class="module-label">FSM/Rules</div>
         </div>
-        <div class="mini-stat">
-          <div class="mini-stat-value" id="chk-pipe">—</div>
-          <div class="mini-stat-label">Pipeline</div>
+        <div class="module-item" id="mod-pipe">
+          <div class="module-value" id="chk-pipe">—</div>
+          <div class="module-label">Pipeline</div>
         </div>
       </div>
 
@@ -212,11 +395,17 @@
       <div class="ctrl-bar">
         <button id="btn-det-start" class="btn-primary btn-sm"
                 onclick="startDetection()">
-          ▶ Start Detection
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style="flex-shrink:0">
+            <polygon points="2,1 9,5 2,9" fill="currentColor"/>
+          </svg>
+          Start Detection
         </button>
         <button id="btn-det-stop" class="btn-danger btn-sm"
                 onclick="stopDetection()" style="display:none;">
-          ■ Stop Detection
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style="flex-shrink:0">
+            <rect x="1" y="1" width="8" height="8" fill="currentColor"/>
+          </svg>
+          Stop Detection
         </button>
         <button id="btn-poly-edit" class="btn-ghost btn-sm"
                 onclick="enterEditMode()">
@@ -224,7 +413,7 @@
         </button>
         <button id="btn-poly-save" class="btn-ghost btn-sm"
                 onclick="savePolygon()"
-                style="display:none; border-color:var(--accent-green); color:var(--accent-green);">
+                style="display:none; border-color:rgba(0,212,140,0.4); color:var(--accent-green);">
           ✓ Save Zone
         </button>
         <button id="btn-poly-undo" class="btn-ghost btn-sm"
@@ -237,17 +426,17 @@
         </button>
         <button id="btn-poly-freeze" class="btn-ghost btn-sm"
                 onclick="freezeFrame()"
-                style="display:none; border-color:rgba(99,179,237,0.5); color:#63b3ed;">
-          ⊙ Re-freeze Frame
+                style="display:none; border-color:rgba(59,130,246,0.4); color:var(--accent-blue);">
+          ⊙ Re-freeze
         </button>
         <button id="btn-poly-clear" class="btn-ghost btn-sm"
                 onclick="clearPolygon()"
-                style="border-color:rgba(239,68,68,0.4); color:var(--accent-red);">
+                style="border-color:rgba(240,64,64,0.35); color:var(--accent-red);">
           ⊘ Clear Zone
         </button>
         <button id="btn-demo-video" class="btn-ghost btn-sm"
                 onclick="loadTestVideo()"
-                style="border-color:rgba(16,185,129,0.45); color:var(--accent-green);">
+                style="border-color:rgba(0,212,140,0.35); color:var(--accent-green);">
           ▶ Test Video
         </button>
       </div>
@@ -258,7 +447,8 @@
              src="{{ url_for('admin_live_feed') }}"
              data-frame-width="{{ camera_status.width or 1280 }}"
              data-frame-height="{{ camera_status.height or 720 }}"
-             alt="Live camera feed">
+             alt="Live camera feed"
+             onerror="setTimeout(()=>{ this.src=this.src.split('?')[0]+'?t='+Date.now(); }, 1500)">
 
         <!-- Polygon canvas overlay -->
         <canvas id="zone-canvas"></canvas>
@@ -275,10 +465,10 @@
               {% if camera_status.connected %}LIVE · {{ camera_status.width }}×{{ camera_status.height }}{% else %}OFFLINE{% endif %}
             </span>
           </span>
-          <span class="overlay-badge" id="det-badge" style="display:none;">
+          <span class="overlay-badge detecting" id="det-badge" style="display:none;">
             <span style="width:6px;height:6px;border-radius:50%;background:var(--accent-amber);
                          animation:alertFlash 1.5s infinite;"></span>
-            <span>DETECTING</span>
+            <span>Detecting</span>
           </span>
           <span class="overlay-badge" style="color:var(--text-muted); {% if not camera_status.source %}display:none;{% endif %}"
                 id="source-badge">
@@ -288,24 +478,22 @@
 
         <!-- Active violation banner -->
         <div class="violation-alert" id="violation-alert">
-          ⚠ ACTIVE VIOLATION DETECTED
+          ⚠ &nbsp;ACTIVE VIOLATION DETECTED
         </div>
       </div>
 
       <!-- Camera error -->
-      <div id="cam-error" style="display:none; margin-top:8px;">
+      <div id="cam-error" style="display:none; margin-top:10px;">
         <div class="alert alert-error" id="cam-error-text"></div>
       </div>
 
       <!-- Edit-mode polygon panel -->
       <div class="poly-panel" id="poly-panel" style="display:none;">
         <div class="poly-hint">
-          <strong>Calibration mode active.</strong> The stream is frozen — click the exact
-          crosswalk corners on the still frame.<br>
-          Use <strong>Undo</strong> to remove the last point, <strong>Save Zone</strong> when
-          done, or <strong>Cancel</strong> to discard.<br>
-          <span style="color:#63b3ed;">⊙ Re-freeze Frame</span>
-          <span style="color:var(--text-muted);"> grabs a fresh snapshot if the scene moved.</span>
+          <strong>Calibration mode active.</strong> Stream frozen — click crosswalk corners on the still frame.<br>
+          <strong>Undo</strong> removes the last point · <strong>Save Zone</strong> when done · <strong>Cancel</strong> to discard.<br>
+          <span style="color:var(--accent-blue);">⊙ Re-freeze</span>
+          <span style="color:var(--text-muted);"> grabs a fresh snapshot if the scene has moved.</span>
         </div>
         <div style="font-family:var(--font-mono); font-size:11px; color:var(--text-muted); margin-bottom:4px;"
              id="poly-freeze-status">Freezing frame…</div>
@@ -315,7 +503,7 @@
 
       <!-- Detection live stats (shown when detection active) -->
       <div id="det-stats-wrap" style="display:none;">
-        <div class="live-stats det-stats" style="margin-top:10px;">
+        <div class="det-stats-grid">
           <div class="mini-stat active">
             <div class="mini-stat-value" id="ds-ped">0</div>
             <div class="mini-stat-label">Pedestrians</div>
@@ -325,16 +513,16 @@
             <div class="mini-stat-label">Vehicles</div>
           </div>
           <div class="mini-stat active">
-            <div class="mini-stat-value" id="ds-ped-zone" style="color:var(--accent-green);">0</div>
+            <div class="mini-stat-value ok" id="ds-ped-zone">0</div>
             <div class="mini-stat-label">P in Zone</div>
           </div>
           <div class="mini-stat active">
-            <div class="mini-stat-value" id="ds-veh-zone" style="color:var(--accent-green);">0</div>
+            <div class="mini-stat-value ok" id="ds-veh-zone">0</div>
             <div class="mini-stat-label">V in Zone</div>
           </div>
           <div class="mini-stat active">
-            <div class="mini-stat-value" id="ds-violations" style="color:var(--accent-red);">0</div>
-            <div class="mini-stat-label">This Session</div>
+            <div class="mini-stat-value fail" id="ds-violations">0</div>
+            <div class="mini-stat-label">Session Hits</div>
           </div>
         </div>
       </div>
@@ -345,7 +533,7 @@
         <div class="source-row">
           <input class="input" type="text" id="cam-source"
                  value="{{ default_source }}"
-               data-demo-source="{{ demo_source }}"
+                 data-demo-source="{{ demo_source }}"
                  placeholder="0  or  rtsp://…  or  http://192.168.1.x:8080/video">
           <button class="btn-primary btn-sm" id="btn-connect"
                   onclick="connectCamera()">Connect</button>
@@ -379,13 +567,16 @@
           </button>
         </div>
 
-        <details style="margin-top:14px;">
-          <summary style="font-family:var(--font-display);font-size:12px;color:var(--text-muted);
-                          cursor:pointer;letter-spacing:0.06em;text-transform:uppercase;">
+        <details style="margin-top:16px;">
+          <summary style="font-family:var(--font-display);font-size:11px;color:var(--text-muted);
+                          cursor:pointer;letter-spacing:0.08em;text-transform:uppercase;
+                          user-select:none;">
             Camera Connection Guide
           </summary>
-          <div style="margin-top:12px;font-family:var(--font-mono);font-size:11px;
-                      color:var(--text-muted);line-height:2;">
+          <div style="margin-top:14px;font-family:var(--font-mono);font-size:11px;
+                      color:var(--text-muted);line-height:2.2;
+                      background:rgba(0,0,0,0.2);border-radius:var(--radius);padding:14px 16px;
+                      border:1px solid var(--border-subtle);">
             <strong style="color:var(--accent-amber);">PHONE — IP Webcam (Android, free)</strong><br>
             &nbsp;&nbsp;Install IP Webcam → Start server → use <code style="color:var(--text-primary);">http://PHONE_IP:8080/video</code><br>
             <br>
@@ -408,17 +599,15 @@
     <!-- ── Right: violation log ──────────────────────────────────────── -->
     <div>
       <div class="card" style="padding:20px;">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
-          <div class="card-title" style="margin-bottom:0;">Violation Log</div>
-          <span style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted);">
-            Auto-refresh 3s
-          </span>
+        <div class="panel-header">
+          <div class="card-title">Violation Log</div>
+          <span class="panel-refresh-tag">Auto 3s</span>
         </div>
         <div class="log-wrap" id="violation-log">
-          <div style="text-align:center;padding:32px;color:var(--text-muted);
-                      font-size:13px;font-family:var(--font-mono);">Loading…</div>
+          <div style="text-align:center;padding:36px;color:var(--text-muted);
+                      font-size:12px;font-family:var(--font-mono);">Loading…</div>
         </div>
-        <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border);">
+        <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border-subtle);">
           <a href="{{ url_for('admin_violations') }}"
              class="btn-ghost btn-sm" style="width:100%;justify-content:center;">
             View Full Log
@@ -550,6 +739,37 @@ canvas.addEventListener("click", (e) => {
 ═══════════════════════════════════════════════════════════════ */
 async function enterEditMode() {
   if (editMode) return;   // prevent double-invocation
+
+  // If no camera is connected, auto-connect the demo video so there is a real
+  // frame to freeze for polygon calibration.
+  try {
+    const s = await fetch("{{ url_for('admin_live_status') }}").then(r => r.json());
+    if (!s.connected) {
+      const statusEl = document.getElementById("poly-freeze-status");
+      if (statusEl) statusEl.textContent = "Connecting demo video for calibration…";
+
+      const demoSrc = (document.getElementById("cam-source").dataset.demoSource || "Videos/v2.mp4").trim();
+      const fd = new FormData();
+      fd.append("source", demoSrc);
+      const d = await fetch("{{ url_for('admin_live_start') }}", { method: "POST", body: fd })
+                         .then(r => r.json()).catch(() => ({}));
+      if (d.ok) {
+        setCamBadge(true, `LIVE · ${d.width}×${d.height}`);
+        setSourceBadge(d.source || demoSrc);
+        document.getElementById("cam-source").value = d.source || demoSrc;
+        document.getElementById("btn-disconnect").style.display = "";
+        frameW = d.width; frameH = d.height;
+        const img = document.getElementById("live-img");
+        img.dataset.frameWidth  = d.width;
+        img.dataset.frameHeight = d.height;
+        img.src = img.src.split("?")[0] + "?t=" + Date.now();
+        syncCanvas();
+        // Brief pause so camera_manager has at least one raw frame buffered
+        await new Promise(r => setTimeout(r, 900));
+      }
+    }
+  } catch(_) {}
+
   editMode = true;
   // Start a fresh polygon so stale/invalid saved points do not anchor to corners.
   polygonPoints = [];
@@ -692,6 +912,42 @@ async function loadPolygon() {
 async function startDetection() {
   const btn = document.getElementById("btn-det-start");
   btn.textContent = "Starting…"; btn.disabled = true;
+
+  // ── Auto-connect camera if not yet connected ──────────────────
+  try {
+    const st = await fetch("{{ url_for('admin_live_status') }}").then(r => r.json());
+    if (!st.connected) {
+      btn.textContent = "Connecting…";
+      // Try the value in the input first, fall back to demo video
+      const input   = document.getElementById("cam-source");
+      const source  = (input ? input.value.trim() : "") || (input ? input.dataset.demoSource : "") || "Videos/v2.mp4";
+      const fd = new FormData();
+      fd.append("source", source);
+      const cd = await fetch("{{ url_for('admin_live_start') }}", { method: "POST", body: fd })
+                            .then(r => r.json()).catch(() => ({}));
+      if (cd.ok) {
+        setCamBadge(true, `LIVE · ${cd.width}×${cd.height}`);
+        setSourceBadge(cd.source || source);
+        if (input) input.value = cd.source || source;
+        const disconnect = document.getElementById("btn-disconnect");
+        if (disconnect) disconnect.style.display = "";
+        frameW = cd.width;  frameH = cd.height;
+        const img = document.getElementById("live-img");
+        img.dataset.frameWidth  = cd.width;
+        img.dataset.frameHeight = cd.height;
+        img.src = img.src.split("?")[0] + "?t=" + Date.now();
+        syncCanvas();
+        // Give camera_manager one cycle to buffer a frame
+        await new Promise(r => setTimeout(r, 600));
+      } else {
+        alert("Could not connect to camera or demo video: " + (cd.error || "Check your source."));
+        btn.textContent = "▶ Start Detection"; btn.disabled = false;
+        return;
+      }
+      btn.textContent = "Starting…";
+    }
+  } catch (_) { /* status fetch failed — proceed anyway and let server decide */ }
+
   try {
     const ctl = new AbortController();
     const timeout = setTimeout(() => ctl.abort(), 20000);
@@ -702,13 +958,10 @@ async function startDetection() {
     clearTimeout(timeout);
     const d = await r.json();
     if (d.ok) {
-      // Enable detection UI — canvas stays VISIBLE while model warms up.
-      // pollDetectionStatus() will hide canvas once d.active becomes true.
       setDetectionUI(true);
       if (d.starting && !d.active) {
         showToast("Detection is warming up (loading model)…", 4500);
       }
-      // If already active on this call, hide canvas immediately
       if (d.active && !editMode) {
         canvas.style.opacity = "0";
       }
@@ -739,6 +992,23 @@ function setDetectionUI(active) {
   document.getElementById("btn-det-stop").style.display  = active ? "" : "none";
   document.getElementById("det-badge").style.display     = active ? "" : "none";
   document.getElementById("det-stats-wrap").style.display = active ? "" : "none";
+  // Video border glow when detecting
+  const wrap = document.getElementById("video-wrap");
+  if (wrap) wrap.classList.toggle("detecting", active);
+
+  // Scan line sweep across the video feed while detection is running
+  if (wrap) {
+    if (active) {
+      if (!wrap.querySelector(".scan-line")) {
+        const sl = document.createElement("div");
+        sl.className = "scan-line";
+        wrap.appendChild(sl);
+      }
+    } else {
+      const sl = wrap.querySelector(".scan-line");
+      if (sl) sl.remove();
+    }
+  }
 
   if (active) {
     // Canvas stays visible during warmup — pollDetectionStatus hides it when model is live
@@ -908,6 +1178,12 @@ function setCheck(id, ok) {
   el.classList.remove("ok", "fail");
   el.classList.add(ok ? "ok" : "fail");
   el.textContent = ok ? "OK" : "FAIL";
+  // Update the parent module-item border/bar too
+  const parent = el.closest(".module-item");
+  if (parent) {
+    parent.classList.remove("ok", "fail");
+    parent.classList.add(ok ? "ok" : "fail");
+  }
 }
 
 function refreshChecks() {
@@ -980,15 +1256,15 @@ function refreshStats() {
    TOAST HELPER
 ═══════════════════════════════════════════════════════════════ */
 function showToast(msg, duration = 3000) {
+  const container = document.getElementById("toast-container") || document.body;
   const t = document.createElement("div");
-  t.style.cssText = `position:fixed;bottom:24px;right:24px;z-index:9999;
-    background:var(--bg-elevated);border:1px solid var(--accent-amber);
-    color:var(--text-primary);padding:10px 18px;border-radius:var(--radius);
-    font-family:var(--font-mono);font-size:13px;box-shadow:0 4px 20px rgba(0,0,0,.4);
-    transition:opacity .3s;`;
+  t.className = "toast";
   t.textContent = msg;
-  document.body.appendChild(t);
-  setTimeout(() => { t.style.opacity = "0"; setTimeout(() => t.remove(), 300); }, duration);
+  container.appendChild(t);
+  setTimeout(() => {
+    t.style.animation = "toastOut 0.25s ease forwards";
+    setTimeout(() => t.remove(), 260);
+  }, duration);
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -1022,6 +1298,19 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     })
     .catch(() => {});
+
+  // Keep the MJPEG stream alive — reconnect if it goes black (naturalHeight drops to 0)
+  let _prevNatH = 0;
+  setInterval(() => {
+    const img = document.getElementById("live-img");
+    if (!img) return;
+    const nh = img.naturalHeight;
+    if (nh === 0 && _prevNatH > 0) {
+      // Stream died — force reconnect
+      img.src = img.src.split("?")[0] + "?t=" + Date.now();
+    }
+    _prevNatH = nh;
+  }, 3000);
 });
 </script>
 {% endblock %}

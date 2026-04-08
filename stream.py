@@ -124,15 +124,11 @@ class CameraStream:
         candidates.append((src, None))
 
         # Windows-specific backend fallbacks for camera indexes.
+        # Note: we only retry the SAME index with different backends — we never
+        # silently switch to a different device index (would confuse the user).
         if isinstance(src, int):
             candidates.append((src, cv2.CAP_DSHOW))
             candidates.append((src, cv2.CAP_MSMF))
-            # If selected index is black/unusable, try common webcam indexes.
-            for alt in (0, 1):
-                if alt != src:
-                    candidates.append((alt, cv2.CAP_DSHOW))
-                    candidates.append((alt, cv2.CAP_MSMF))
-                    candidates.append((alt, None))
 
         # Final fallback: demo video file (works even without any camera attached)
         import os as _os
@@ -146,12 +142,16 @@ class CameraStream:
                 cap.release()
                 continue
 
-            ok, frame = cap.read()
-            if not ok or frame is None:
-                cap.release()
-                continue
+            # Try up to 5 frames — Phone Link / virtual cameras may return black
+            # on the first read while they warm up.
+            usable = False
+            for _ in range(5):
+                ok, frame = cap.read()
+                if ok and frame is not None and not self._is_near_black(frame):
+                    usable = True
+                    break
 
-            if self._is_near_black(frame):
+            if not usable:
                 cap.release()
                 continue
 
@@ -239,6 +239,18 @@ class CameraStream:
                     self._jpeg = _PLACEHOLDER
                 break
 
+            # Skip near-black frames from live cameras.
+            # Phone Link / virtual camera drivers sometimes return a completely
+            # black frame while the host CPU is busy (e.g. YOLO inference).
+            # Passing those frames into the pipeline makes the MJPEG feed go
+            # dark.  For video files we let them through — dark scenes are valid.
+            if not is_video_file and self._is_near_black(frame):
+                elapsed = time.monotonic() - t0
+                sleep   = target_interval - elapsed
+                if sleep > 0:
+                    time.sleep(sleep)
+                continue
+
             _, buf = cv2.imencode(
                 ".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 75]
             )
@@ -255,6 +267,38 @@ class CameraStream:
 # ── Singleton ────────────────────────────────────────────────────────────────
 
 camera_manager = CameraStream()
+
+
+# ── Multi-camera configuration ────────────────────────────────────────────────
+
+CAMERA_CONFIGS: dict[str, dict] = {
+    "cam1": {"label": "Camera 1 — Entrance",  "demo": "Videos/v1.mp4"},
+    "cam2": {"label": "Camera 2 — Crosswalk", "demo": "Videos/v2.mp4"},
+    "cam3": {"label": "Camera 3 — Exit",      "demo": "Videos/v3.mp4"},
+}
+
+
+class CameraRegistry:
+    """Manages one :class:`CameraStream` per camera ID (lazy init)."""
+
+    def __init__(self) -> None:
+        self._streams: dict[str, CameraStream] = {}
+        self._lock = threading.Lock()
+
+    def get(self, cam_id: str) -> CameraStream:
+        with self._lock:
+            if cam_id not in self._streams:
+                self._streams[cam_id] = CameraStream()
+            return self._streams[cam_id]
+
+    def statuses(self) -> dict:
+        return {
+            cam_id: {"config": cfg, "stream": self.get(cam_id).status()}
+            for cam_id, cfg in CAMERA_CONFIGS.items()
+        }
+
+
+registry = CameraRegistry()
 
 
 # ── MJPEG generator (pass to Flask Response) ─────────────────────────────────
