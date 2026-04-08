@@ -106,6 +106,7 @@
             <th>ID</th>
             <th>Timestamp</th>
             <th>Plate</th>
+            <th>Img</th>
             <th>Vehicle</th>
             <th>Type</th>
             <th>Severity</th>
@@ -130,6 +131,18 @@
                 style="background:none; border:none; cursor:pointer; color:var(--text-muted);
                        padding:0 4px; line-height:1; font-size:12px; vertical-align:middle;"
                 id="cp-{{ loop.index }}">⧉</button>
+              {% endif %}
+            </td>
+            <td style="padding:4px 8px;">
+              {% if v.plate_crop_path %}
+                <img src="{{ url_for('static', filename=v.plate_crop_path) }}"
+                     alt="plate"
+                     style="height:36px; max-width:80px; object-fit:contain; border-radius:3px;
+                            border:1px solid rgba(245,158,11,0.3); background:var(--bg-elevated);
+                            display:block;"
+                     onerror="this.style.display='none';">
+              {% else %}
+                <span style="color:var(--text-muted); font-size:11px;">—</span>
               {% endif %}
             </td>
             <td class="mono" style="font-size:12px; color:var(--text-secondary);">
@@ -172,7 +185,7 @@
           </tr>
           {% else %}
           <tr>
-            <td colspan="9" style="text-align:center; color:var(--text-muted); padding:48px;">
+            <td colspan="10" style="text-align:center; color:var(--text-muted); padding:48px;">
               No violations match the selected filters.
             </td>
           </tr>

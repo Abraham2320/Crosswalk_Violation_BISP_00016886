@@ -91,6 +91,7 @@ class EnforcementPipeline:
             "llm_report_json": json.dumps(report_result.report_json),
             "llm_report_text": report_result.report_text,
             "snapshot_path": evidence.event.snapshot_path,
+            "plate_crop_path": evidence.event.plate_crop_path,
             "vehicle_speed_estimate": evidence.event.vehicle_speed_estimate,
         }
         self.repository.save_violation(payload)

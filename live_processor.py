@@ -839,6 +839,7 @@ class LiveProcessor:
                         plate_crop = frame[ppy1:ppy2, ppx1:ppx2]
                         plate_fname = f"plate_{event.violation_id}.jpg"
                         cv2.imwrite(str(_SNAPSHOTS / plate_fname), plate_crop)
+                        event.plate_crop_path = f"snapshots/{plate_fname}"
                         print(f"[LiveProcessor] Plate crop saved: {plate_fname}")
                 except Exception as exc:
                     print(f"[LiveProcessor] Plate crop save failed: {exc}")

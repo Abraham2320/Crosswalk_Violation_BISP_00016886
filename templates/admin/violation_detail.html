@@ -57,6 +57,20 @@
       </div>
     </div>
 
+    {% if violation.plate_crop_path %}
+    <!-- ── Plate Crop ─────────────────────────────────── -->
+    <div class="snapshot-container" style="margin-top:16px;">
+      <div class="snapshot-label">Detected Plate</div>
+      <img
+        src="{{ url_for('static', filename=violation.plate_crop_path) }}"
+        alt="Plate crop"
+        class="snapshot-img"
+        style="max-height:100px; object-fit:contain; background:var(--bg-elevated);"
+        onerror="this.closest('.snapshot-container').style.display='none';"
+      >
+    </div>
+    {% endif %}
+
     <!-- ── Right: Details ───────────────────────────────── -->
     <div class="card" style="padding:28px;">
       <!-- Violation type header -->

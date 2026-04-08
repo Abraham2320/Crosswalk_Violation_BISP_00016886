@@ -500,6 +500,15 @@
         {% else %}
           <div class="inv-snapshot-none">No snapshot captured for this record</div>
         {% endif %}
+        {% if violation.plate_crop_path %}
+          <div style="margin-top:12px;">
+            <div class="inv-section-title" style="margin-bottom:6px;">Plate Crop</div>
+            <img src="{{ url_for('static', filename=violation.plate_crop_path) }}"
+                 alt="Plate crop"
+                 style="max-height:80px; border:1px solid rgba(245,158,11,0.3); border-radius:var(--radius); display:block; object-fit:contain; background:var(--bg-elevated); padding:4px;"
+                 onerror="this.parentElement.style.display='none';">
+          </div>
+        {% endif %}
       </div>
 
       <!-- Location map -->

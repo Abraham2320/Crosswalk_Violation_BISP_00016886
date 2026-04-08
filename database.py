@@ -56,6 +56,7 @@ def init_db() -> None:
             "latitude":               "REAL",
             "longitude":              "REAL",
             "location_address":       "TEXT",
+            "plate_crop_path":        "TEXT",
         }.items():
             if col not in cols:
                 conn.execute(

@@ -282,6 +282,7 @@ else:
         vehicle_speed_estimate: Optional[float] = None
         snapshot_path: Optional[str] = None
         location_name: Optional[str] = None
+        plate_crop_path: Optional[str] = None
 
 
     @dataclass(slots=True)
@@ -362,6 +363,7 @@ else:
                     ("snapshot_path",          "TEXT"),
                     ("location_name",          "TEXT"),
                     ("vehicle_speed_estimate", "REAL"),
+                    ("plate_crop_path",        "TEXT"),
                 ]:
                     try:
                         conn.execute(
@@ -423,6 +425,7 @@ else:
                 llm_report_text=row["llm_report_text"],
                 vehicle_ref_id=row["vehicle_ref_id"],
                 vehicle_speed_estimate=row["vehicle_speed_estimate"] if "vehicle_speed_estimate" in row.keys() else None,
+                plate_crop_path=row["plate_crop_path"] if "plate_crop_path" in row.keys() else None,
             )
 
         def _row_to_invoice(self, row: sqlite3.Row) -> InvoiceRecord:
@@ -499,8 +502,8 @@ else:
                         plate_image_path, report_path, invoice_path, violation_type, severity,
                         pedestrian_direction, confidence, status, location, created_at,
                         llm_report_json, llm_report_text, vehicle_ref_id, snapshot_path,
-                        vehicle_speed_estimate
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        vehicle_speed_estimate, plate_crop_path
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         payload["id"],
@@ -524,6 +527,7 @@ else:
                         vehicle_ref_id,
                         payload.get("snapshot_path"),
                         payload.get("vehicle_speed_estimate"),
+                        payload.get("plate_crop_path"),
                     ),
                 )
                 row = conn.execute("SELECT * FROM violations WHERE id = ?", (payload["id"],)).fetchone()

@@ -365,7 +365,7 @@ def admin_violations():
         rows = conn.execute(
             f"""SELECT id, timestamp, plate_number, vehicle_id,
                        violation_type, severity, location, location_name,
-                       confidence, snapshot_path
+                       confidence, snapshot_path, plate_crop_path
                 FROM   violations {where}
                 ORDER  BY timestamp DESC
                 LIMIT  ? OFFSET ?""",

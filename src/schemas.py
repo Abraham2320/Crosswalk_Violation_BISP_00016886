@@ -51,6 +51,7 @@ class ViolationEvent:
     snapshot_path: Optional[str] = None
     vehicle_speed_estimate: Optional[float] = None
     plate_number: Optional[str] = None
+    plate_crop_path: Optional[str] = None
 
     @classmethod
     def create(
@@ -69,6 +70,7 @@ class ViolationEvent:
         snapshot_path: Optional[str] = None,
         vehicle_speed_estimate: Optional[float] = None,
         plate_number: Optional[str] = None,
+        plate_crop_path: Optional[str] = None,
     ) -> "ViolationEvent":
         return cls(
             violation_id=str(uuid4()),
@@ -87,6 +89,7 @@ class ViolationEvent:
             snapshot_path=snapshot_path,
             vehicle_speed_estimate=vehicle_speed_estimate,
             plate_number=plate_number,
+            plate_crop_path=plate_crop_path,
         )
 
     def to_metadata(self) -> Dict[str, Any]:
