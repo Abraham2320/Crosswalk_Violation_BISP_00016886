@@ -47,14 +47,14 @@ including a school bus, police car, and vintage VW van.
 Place the notebook training dashboard image in this folder as
 `models/training_results.png`, then it will render below.
 
-![Training Results](training_results.jpg)
+![Training Results](training_results.png)
 
 ## Prediction Preview Image
 
 Place the prediction collage image in this folder as
 `models/prediction_preview.png`, then it will render below.
 
-![Prediction Preview](predictions_preview.png)
+![Prediction Preview](predictions_preview.jpg)
 
 ## Pipeline Diagrams
 
