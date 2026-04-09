@@ -54,7 +54,7 @@ Place the notebook training dashboard image in this folder as
 Place the prediction collage image in this folder as
 `models/prediction_preview.png`, then it will render below.
 
-![Prediction Preview](prediction_preview.png)
+![Prediction Preview](predictions_preview.png)
 
 ## Pipeline Diagrams
 
