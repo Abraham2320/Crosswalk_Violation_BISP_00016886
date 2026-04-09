@@ -233,11 +233,11 @@ def check_violation(
     Only fires on the frame the car first enters the polygon
     (car_track.polygon_entry_frame == frame_number).
 
-    Scenario A — ped CLEARING/EXITED (already past midline):
-        No violation.  Exception → UNSAFE_REENTRY (LOW):
+    Scenario A — ped EXITED:
+        No direct overlap violation. Exception → UNSAFE_REENTRY (LOW):
         if ped exited within SAFE_ENTRY_DELAY_FRAMES and car was not yielding.
 
-    Scenario B — ped ENTERING/CROSSING (still in danger zone):
+    Scenario B — ped ENTERING/CROSSING/CLEARING and still overlapping polygon:
         FAILED_TO_YIELD (HIGH) if car was not yielding.
 
     Returns None when no violation applies.
@@ -246,13 +246,23 @@ def check_violation(
         return None
 
     ped_state = ped_track.state
+    ped_overlaps = _ped_in_polygon(ped_track, polygon)
+    car_not_yielding = not was_yielding(car_track)
 
-    if ped_state in ("CLEARING", "EXITED"):
+    if ped_state in ("ENTERING", "CROSSING", "CLEARING") and ped_overlaps and car_not_yielding:
+        return Violation(
+            car_id=car_track.track_id,
+            ped_id=ped_track.track_id,
+            frame_number=frame_number,
+            violation_type="FAILED_TO_YIELD",
+            severity="HIGH",
+        )
+
+    if ped_state == "EXITED":
         if (
-            ped_state == "EXITED"
-            and ped_track.exit_frame is not None
+            ped_track.exit_frame is not None
             and (frame_number - ped_track.exit_frame) <= SAFE_ENTRY_DELAY_FRAMES
-            and not was_yielding(car_track)
+            and car_not_yielding
         ):
             return Violation(
                 car_id=car_track.track_id,
@@ -260,24 +270,6 @@ def check_violation(
                 frame_number=frame_number,
                 violation_type="UNSAFE_REENTRY",
                 severity="LOW",
-            )
-        return None
-
-    if ped_state in ("ENTERING", "CROSSING"):
-        # Guard: confirm box/centroid still overlaps polygon and ped hasn't crossed midline.
-        # Use box intersection (angled camera: centroid may be outside while body overlaps).
-        if (
-            _ped_in_polygon(ped_track, polygon)
-            and ped_track.centroid is not None
-            and not pedestrian_is_in_exit_zone(ped_track.centroid, polygon_midline, approach_axis)
-            and not was_yielding(car_track)
-        ):
-            return Violation(
-                car_id=car_track.track_id,
-                ped_id=ped_track.track_id,
-                frame_number=frame_number,
-                violation_type="FAILED_TO_YIELD",
-                severity="HIGH",
             )
 
     return None

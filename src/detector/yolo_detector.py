@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from ultralytics import YOLO
@@ -16,6 +17,10 @@ class YOLODetector:
         self.classes = classes
         self.conf = conf
         self.imgsz = imgsz
+        # Live/device tuning is env-driven so production can force CUDA while
+        # local development can stay on CPU without code changes.
+        self.device = os.getenv("YOLO_DEVICE", "") or None
+        self.half = os.getenv("YOLO_HALF", "1") != "0"
 
     def detect(self, frame):
         return self.model.track(
@@ -25,4 +30,7 @@ class YOLODetector:
             imgsz=self.imgsz,
             classes=self.classes,
             tracker=_TRACKER_ARG,
+            device=self.device,
+            half=self.half,
+            verbose=False,
         )
