@@ -47,7 +47,7 @@ including a school bus, police car, and vintage VW van.
 Place the notebook training dashboard image in this folder as
 `models/training_results.png`, then it will render below.
 
-![Training Results](training_results.png)
+![Training Results](training_results.jpg)
 
 ## Prediction Preview Image
 
