@@ -145,6 +145,7 @@ class LiveProcessor:
         self._upper_poly = None
         self._lower_poly = None
         self._split_ratio = 0.32
+        self._show_split_overlay = True
         self._stabilizer = None
         self._stabilizer_enabled = os.getenv("LIVE_ENABLE_STABILIZATION", "1") != "0"
         self._stabilizer_initialized = False
@@ -313,6 +314,7 @@ class LiveProcessor:
             print(f"[LiveProcessor:{self._cam_id}] OCR engine unavailable: {exc}")
             self._ocr_engine = None
         self._split_ratio = cfg.runtime.split_ratio
+        self._show_split_overlay = cfg.runtime.show_split_overlay
         self._stabilizer = VideoStabilizer() if self._stabilizer_enabled else None
         self._stabilizer_initialized = False
         self._detect_every = max(1, int(os.getenv("LIVE_DETECT_EVERY_N_FRAMES", "1")))
@@ -414,10 +416,11 @@ class LiveProcessor:
         # ── Draw polygon zone overlay (AFTER detection, same order as main.py) ─
         if polygon is not None and crosswalk is not None:
             crosswalk.draw(frame)
-            crosswalk.draw_half_split(frame, ratio=self._split_ratio)
-            if upper_poly is not None and lower_poly is not None:
-                _draw_zone_overlay(frame, upper_poly, (255, 0, 0), alpha=0.15)
-                _draw_zone_overlay(frame, lower_poly, (0, 255, 0), alpha=0.15)
+            if self._show_split_overlay:
+                crosswalk.draw_half_split(frame, ratio=self._split_ratio)
+                if upper_poly is not None and lower_poly is not None:
+                    _draw_zone_overlay(frame, upper_poly, (255, 0, 0), alpha=0.15)
+                    _draw_zone_overlay(frame, lower_poly, (0, 255, 0), alpha=0.15)
 
         # ── Stabilizer label — mirrors main.py ────────────────────────────────
         if self._stabilizer is not None:
@@ -546,7 +549,11 @@ class LiveProcessor:
 
             if cls != 0:  # vehicle
                 vt = self._veh_tracks.get(obj_id)
-                if vt is not None and vt.polygon_entry_frame == self._frame_index:
+                if (
+                    vt is not None
+                    and vt.polygon_entry_frame is not None
+                    and (self._frame_index - vt.polygon_entry_frame) <= 3
+                ):
                     for ped_id, pt in self._ped_tracks.items():
                         pair = (obj_id, ped_id)
                         if pair in self._triggered_pairs:

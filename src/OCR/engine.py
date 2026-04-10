@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import re
 
 import cv2
@@ -16,8 +17,11 @@ class OCREngine:
         if backend == "easyocr":
             try:
                 import easyocr  # type: ignore
-
-                self._reader = easyocr.Reader(["en"], gpu=False)
+                use_gpu = os.getenv("OCR_USE_GPU", "1") != "0"
+                try:
+                    self._reader = easyocr.Reader(["en"], gpu=use_gpu)
+                except Exception:
+                    self._reader = easyocr.Reader(["en"], gpu=False)
             except Exception:
                 self._reader = None
         elif backend == "paddleocr":

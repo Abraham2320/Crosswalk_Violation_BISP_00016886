@@ -16,6 +16,7 @@ from detector.tracker import PedestrianTrack, VehicleTrack
 # ---------------------------------------------------------------------------
 
 SAFE_ENTRY_DELAY_FRAMES: int = 45       # frames after ped exits; car entry within = violation
+ENTRY_EVAL_WINDOW_FRAMES: int = 3       # tolerate brief frame drops around vehicle entry
 YIELD_SPEED_THRESHOLD_PX: float = 4.0  # px/frame — below this counts as yielding
 TRACK_RESET_FRAMES: int = 90            # frames outside before ped track is pruned
 
@@ -230,8 +231,8 @@ def check_violation(
 ) -> Optional[Violation]:
     """
     Evaluate a (car, pedestrian) pair for a crosswalk violation.
-    Only fires on the frame the car first enters the polygon
-    (car_track.polygon_entry_frame == frame_number).
+    Fires within a short window after the car enters the polygon to tolerate
+    dropped/skipped frames in live pipelines.
 
     Scenario A — ped EXITED:
         No direct overlap violation. Exception → UNSAFE_REENTRY (LOW):
@@ -242,7 +243,9 @@ def check_violation(
 
     Returns None when no violation applies.
     """
-    if car_track.polygon_entry_frame != frame_number:
+    if car_track.polygon_entry_frame is None:
+        return None
+    if (frame_number - car_track.polygon_entry_frame) > ENTRY_EVAL_WINDOW_FRAMES:
         return None
 
     ped_state = ped_track.state

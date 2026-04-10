@@ -48,6 +48,7 @@ class RuntimeSettings:
         os.getenv("PEDESTRIAN_DIRECTION_THRESHOLD", "3")
     )
     split_ratio: float = float(os.getenv("CROSSWALK_SPLIT_RATIO", "0.32"))
+    show_split_overlay: bool = os.getenv("SHOW_SPLIT_OVERLAY", "1") != "0"
     target_fps: int = int(os.getenv("TARGET_FPS", "15"))
     location_name: str = os.getenv("LOCATION_NAME", "Crosswalk A")
     authority_name: str = os.getenv("AUTHORITY_NAME", "City Traffic Enforcement Unit")
