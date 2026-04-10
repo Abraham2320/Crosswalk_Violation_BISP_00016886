@@ -93,6 +93,35 @@
 .module-value.ok   { color: var(--accent-green); text-shadow: 0 0 10px rgba(0,212,140,0.4); }
 .module-value.fail { color: var(--accent-red);   text-shadow: 0 0 10px rgba(240,64,64,0.4); }
 .module-label { font-family: var(--font-display); font-size: 9px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-muted); }
+.diag-grid {
+  display: grid;
+  grid-template-columns: repeat(4,1fr);
+  gap: 8px;
+  margin-bottom: 10px;
+}
+@media (max-width: 1100px) { .diag-grid { grid-template-columns: repeat(2,1fr); } }
+.diag-item {
+  background: rgba(12,17,32,0.65);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 8px;
+  text-align: center;
+}
+.diag-value {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  color: var(--accent-amber);
+  font-weight: 700;
+}
+.diag-label {
+  font-family: var(--font-display);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
 .quick-stats { display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; margin-bottom: 10px; }
 .qs-item { background: rgba(12,17,32,0.65); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 10px; text-align: center; backdrop-filter: blur(8px); }
 .qs-value { font-family: var(--font-mono); font-size: 22px; font-weight: 700; color: var(--accent-amber); line-height: 1; letter-spacing: -0.01em; text-shadow: 0 0 14px rgba(245,166,35,0.25); }
@@ -151,6 +180,38 @@
   background: rgba(255,255,255,0.03); border: 1px solid var(--border);
   border-radius: 3px; padding: 2px 7px; letter-spacing: 0.06em; text-transform: uppercase;
 }
+.location-grid {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr 1fr;
+  gap: 8px;
+  margin-top: 10px;
+}
+@media (max-width: 1200px) { .location-grid { grid-template-columns: 1fr; } }
+.camera-tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0 0;
+}
+.camera-tag {
+  border: 1px solid rgba(245,166,35,0.35);
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--accent-amber);
+  background: rgba(245,166,35,0.08);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.camera-map {
+  height: 280px;
+  border-radius: var(--radius);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: rgba(12,17,32,0.65);
+  margin-top: 10px;
+}
 /* Polygon status indicator */
 .poly-status-bar {
   display: flex; align-items: center; gap: 8px; padding: 7px 12px;
@@ -194,20 +255,31 @@
                 text-decoration:none;transition:color 0.2s,border-color 0.2s;"
          onmouseover="this.style.color='var(--accent-amber)';this.style.borderColor='rgba(245,166,35,0.4)'"
          onmouseout="this.style.color='var(--text-muted)';this.style.borderColor='var(--border)'">
-        ← All Cameras
+        {{ t('camera_detail.all_cameras') }}
       </a>
       <div>
         <div class="page-title" style="font-size:22px;">
           <span style="color:var(--accent-amber);">&#9679;</span>&nbsp;{{ cam_label }}
         </div>
-        <div class="page-subtitle">Camera ID: {{ cam_id }} &nbsp;·&nbsp; Real-time violation detection</div>
+        <div class="page-subtitle">Camera ID: {{ cam_id }} &nbsp;·&nbsp; {{ t('camera_detail.subtitle') }}</div>
       </div>
     </div>
     <div class="live-indicator" id="sys-indicator">
       <div class="live-dot"></div>
-      <span id="sys-label">System Active</span>
+      <span id="sys-label">{{ t('dashboard.system_active') }}</span>
     </div>
   </div>
+
+  {% if error == 'invalid-location' %}
+  <div class="alert alert-error" style="margin-bottom:12px;">
+    {{ t('camera_detail.err_invalid_location') }}
+  </div>
+  {% endif %}
+  {% if ok == 'location-updated' %}
+  <div class="alert alert-success" style="margin-bottom:12px;">
+    {{ t('camera_detail.ok_location_updated') }}
+  </div>
+  {% endif %}
 
   <div class="live-grid">
 
@@ -218,15 +290,15 @@
       <div class="quick-stats">
         <div class="qs-item">
           <div class="qs-value" id="ls-total">—</div>
-          <div class="qs-label">Total Violations</div>
+          <div class="qs-label">{{ t('dashboard.total_violations') }}</div>
         </div>
         <div class="qs-item">
           <div class="qs-value" id="ls-today">—</div>
-          <div class="qs-label">Today</div>
+          <div class="qs-label">{{ t('dashboard.today') }}</div>
         </div>
         <div class="qs-item">
           <div class="qs-value" id="ls-fps">{{ camera_status.fps if camera_status.connected else '—' }}</div>
-          <div class="qs-label">Live FPS</div>
+          <div class="qs-label">{{ t('camera_detail.live_fps') }}</div>
         </div>
       </div>
 
@@ -239,28 +311,40 @@
         <div class="module-item" id="mod-pipe"><div class="module-value" id="chk-pipe">—</div><div class="module-label">Pipeline</div></div>
       </div>
 
+      <div class="diag-grid">
+        <div class="diag-item"><div class="diag-value" id="diag-model">—</div><div class="diag-label">Detector</div></div>
+        <div class="diag-item"><div class="diag-value" id="diag-plate-model">—</div><div class="diag-label">Plate Model</div></div>
+        <div class="diag-item"><div class="diag-value" id="diag-ocr">—</div><div class="diag-label">OCR Backend</div></div>
+        <div class="diag-item"><div class="diag-value" id="diag-skip">—</div><div class="diag-label">Frame Skip</div></div>
+        <div class="diag-item"><div class="diag-value" id="diag-frame-ms">—</div><div class="diag-label">Frame ms avg</div></div>
+        <div class="diag-item"><div class="diag-value" id="diag-detect-ms">—</div><div class="diag-label">Detect ms avg</div></div>
+        <div class="diag-item"><div class="diag-value" id="diag-ocr-ms">—</div><div class="diag-label">OCR ms avg</div></div>
+        <div class="diag-item"><div class="diag-value" id="diag-obj">—</div><div class="diag-label">Objects (P/V)</div></div>
+      </div>
+
       <!-- Polygon zone status bar -->
       <div class="poly-status-bar no-poly" id="poly-status-bar">
         <span id="poly-status-dot" style="width:8px;height:8px;border-radius:50%;background:currentColor;flex-shrink:0;"></span>
-        <span id="poly-status-text">No crosswalk zone defined — draw one before starting detection</span>
+        <span id="poly-status-text">{{ t('camera_detail.no_poly') }}</span>
       </div>
 
       <!-- Detection control bar -->
       <div class="ctrl-bar">
-        <button id="btn-det-start" class="btn-primary btn-sm" onclick="startDetection()" disabled title="Draw and save a crosswalk zone first">
+        <button id="btn-det-start" class="btn-primary btn-sm" onclick="startDetection()" disabled title="{{ t('live.draw_save_zone_first') }}">
           <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style="flex-shrink:0"><polygon points="2,1 9,5 2,9" fill="currentColor"/></svg>
-          Start Detection
+          {{ t('camera_detail.start_detection') }}
         </button>
         <button id="btn-det-stop" class="btn-danger btn-sm" onclick="stopDetection()" style="display:none;">
           <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style="flex-shrink:0"><rect x="1" y="1" width="8" height="8" fill="currentColor"/></svg>
-          Stop Detection
+          {{ t('camera_detail.stop_detection') }}
         </button>
-        <button id="btn-poly-edit"   class="btn-ghost btn-sm" onclick="enterEditMode()">◈ Draw Polygon</button>
-        <button id="btn-poly-save"   class="btn-ghost btn-sm" onclick="savePolygon()"   style="display:none; border-color:rgba(0,212,140,0.4); color:var(--accent-green);">✓ Save Zone</button>
-        <button id="btn-poly-undo"   class="btn-ghost btn-sm" onclick="undoPoint()"    style="display:none;">↩ Undo</button>
-        <button id="btn-poly-cancel" class="btn-ghost btn-sm" onclick="exitEditMode()" style="display:none;">✕ Cancel</button>
-        <button id="btn-poly-clear"  class="btn-ghost btn-sm" onclick="clearPolygon()" style="border-color:rgba(240,64,64,0.35); color:var(--accent-red);">⊘ Clear Zone</button>
-        <button id="btn-demo-video"  class="btn-ghost btn-sm" onclick="loadTestVideo()" style="border-color:rgba(0,212,140,0.35); color:var(--accent-green);">▶ Demo Video</button>
+        <button id="btn-poly-edit"   class="btn-ghost btn-sm" onclick="enterEditMode()">◈ {{ t('camera_detail.draw_polygon') }}</button>
+        <button id="btn-poly-save"   class="btn-ghost btn-sm" onclick="savePolygon()"   style="display:none; border-color:rgba(0,212,140,0.4); color:var(--accent-green);">✓ {{ t('camera_detail.save_zone') }}</button>
+        <button id="btn-poly-undo"   class="btn-ghost btn-sm" onclick="undoPoint()"    style="display:none;">↩ {{ t('camera_detail.undo') }}</button>
+        <button id="btn-poly-cancel" class="btn-ghost btn-sm" onclick="exitEditMode()" style="display:none;">✕ {{ t('common.cancel') }}</button>
+        <button id="btn-poly-clear"  class="btn-ghost btn-sm" onclick="clearPolygon()" style="border-color:rgba(240,64,64,0.35); color:var(--accent-red);">⊘ {{ t('camera_detail.clear_zone') }}</button>
+        <button id="btn-reset-output" class="btn-ghost btn-sm" onclick="resetSessionOutput()" style="border-color:rgba(0,200,255,0.35); color:#00C8FF;">↺ {{ t('camera_detail.clear_session') }}</button>
+        <button id="btn-demo-video"  class="btn-ghost btn-sm" onclick="loadTestVideo()" style="border-color:rgba(0,212,140,0.35); color:var(--accent-green);">▶ {{ t('camera_detail.demo_video') }}</button>
       </div>
 
       <!-- Video feed — canvas is a TRANSPARENT overlay, never darkens the video -->
@@ -285,7 +369,7 @@
           </span>
           <span class="overlay-badge edit-active" id="edit-badge" style="display:none;">
             <span style="width:6px;height:6px;border-radius:50%;background:#00C8FF;"></span>
-            <span id="edit-badge-text">Drawing zone…</span>
+            <span id="edit-badge-text">{{ t('camera_detail.drawing_zone') }}</span>
           </span>
           <span class="overlay-badge" style="color:var(--text-muted);{% if not camera_status.source %}display:none;{% endif %}" id="source-badge">
             {% if camera_status.source %}{{ camera_status.source[:36] }}{% endif %}
@@ -302,20 +386,20 @@
       <!-- Polygon edit panel (shown while drawing) -->
       <div class="poly-panel" id="poly-panel" style="display:none;">
         <div class="poly-hint">
-          <strong>Zone calibration active.</strong> Click crosswalk corners directly on the live video.<br>
-          <strong>Undo</strong> removes the last point · <strong>Save Zone</strong> when ≥4 points · <strong>Cancel</strong> discards.
+          <strong>{{ t('camera_detail.draw_polygon') }}</strong> {{ t('camera_detail.zone_hint') }}<br>
+          <strong>{{ t('camera_detail.undo') }}</strong> · <strong>{{ t('camera_detail.save_zone') }}</strong> · <strong>{{ t('common.cancel') }}</strong>
         </div>
-        <div style="font-family:var(--font-mono);font-size:11px;color:var(--text-muted);" id="poly-point-count">Points: 0</div>
+          <div style="font-family:var(--font-mono);font-size:11px;color:var(--text-muted);" id="poly-point-count">{{ t('camera_detail.points') }}: 0</div>
       </div>
 
       <!-- Detection live stats -->
       <div id="det-stats-wrap" style="display:none;">
         <div class="det-stats-grid">
-          <div class="mini-stat active"><div class="mini-stat-value" id="ds-ped">0</div><div class="mini-stat-label">Pedestrians</div></div>
-          <div class="mini-stat active"><div class="mini-stat-value" id="ds-veh">0</div><div class="mini-stat-label">Vehicles</div></div>
-          <div class="mini-stat active"><div class="mini-stat-value ok" id="ds-ped-zone">0</div><div class="mini-stat-label">P in Zone</div></div>
-          <div class="mini-stat active"><div class="mini-stat-value ok" id="ds-veh-zone">0</div><div class="mini-stat-label">V in Zone</div></div>
-          <div class="mini-stat active"><div class="mini-stat-value fail" id="ds-violations">0</div><div class="mini-stat-label">Session Hits</div></div>
+          <div class="mini-stat active"><div class="mini-stat-value" id="ds-ped">0</div><div class="mini-stat-label">{{ t('camera_detail.pedestrians') }}</div></div>
+          <div class="mini-stat active"><div class="mini-stat-value" id="ds-veh">0</div><div class="mini-stat-label">{{ t('camera_detail.vehicles_label') }}</div></div>
+          <div class="mini-stat active"><div class="mini-stat-value ok" id="ds-ped-zone">0</div><div class="mini-stat-label">{{ t('camera_detail.p_in_zone') }}</div></div>
+          <div class="mini-stat active"><div class="mini-stat-value ok" id="ds-veh-zone">0</div><div class="mini-stat-label">{{ t('camera_detail.v_in_zone') }}</div></div>
+          <div class="mini-stat active"><div class="mini-stat-value fail" id="ds-violations">0</div><div class="mini-stat-label">{{ t('camera_detail.session_hits') }}</div></div>
         </div>
       </div>
 
@@ -323,26 +407,26 @@
       <div class="card" style="padding:14px 16px; margin-top:14px;">
         <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
           <div style="font-family:var(--font-display);font-size:11px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-muted);">
-            Detected Plates (live)
+            {{ t('camera_detail.detected_plates') }}
           </div>
           <span style="font-family:var(--font-mono);font-size:9px;color:var(--text-muted);border:1px solid var(--border);border-radius:3px;padding:1px 6px;">OCR · REAL-TIME</span>
         </div>
         <div class="plate-strip" id="plate-strip">
-          <span style="font-family:var(--font-mono);font-size:11px;color:var(--text-muted);">No plates detected yet.</span>
+          <span style="font-family:var(--font-mono);font-size:11px;color:var(--text-muted);">{{ t('camera_detail.no_plates') }}</span>
         </div>
       </div>
 
       <!-- Camera source card -->
       <div class="card camera-control" style="margin-top:14px;">
-        <div class="card-title">Camera Source</div>
+        <div class="card-title">{{ t('camera_detail.camera_source') }}</div>
         <div class="source-row">
           <input class="input" type="text" id="cam-source"
                  value="{{ camera_status.source or demo_source }}"
                  data-demo-source="{{ demo_source }}"
                  placeholder="0  or  rtsp://…  or  Videos/v1.mp4">
-          <button class="btn-primary btn-sm" id="btn-connect" onclick="connectCamera()">Connect</button>
+          <button class="btn-primary btn-sm" id="btn-connect" onclick="connectCamera()">{{ t('camera_detail.connect') }}</button>
           <button class="btn-ghost btn-sm" id="btn-disconnect" onclick="disconnectCamera()"
-                  {% if not camera_status.connected %}style="display:none;"{% endif %}>Disconnect</button>
+                  {% if not camera_status.connected %}style="display:none;"{% endif %}>{{ t('camera_detail.disconnect') }}</button>
         </div>
         <div class="source-presets">
           <span style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted);align-self:center;">Quick:</span>
@@ -355,20 +439,45 @@
         </div>
       </div>
 
+      <div class="card camera-control" style="margin-top:14px;">
+        <div class="card-title">{{ t('camera_detail.location_title') }}</div>
+        <div style="font-family:var(--font-mono);font-size:11px;color:var(--text-muted);">
+          {{ camera_location_name }} · {{ '%.5f'|format(camera_latitude|float) }}, {{ '%.5f'|format(camera_longitude|float) }}
+        </div>
+        {% if camera_tags %}
+        <div class="camera-tag-list">
+          {% for t in camera_tags %}
+          <span class="camera-tag">{{ t }}</span>
+          {% endfor %}
+        </div>
+        {% endif %}
+        <div id="camera-map" class="camera-map"></div>
+
+        <form method="post" action="{{ url_for('admin_camera_location_update', cam_id=cam_id) }}" style="margin-top:12px;">
+          <div class="location-grid">
+            <input class="input" name="location_name" value="{{ camera_location_name }}" placeholder="Main Crosswalk" required>
+            <input class="input" name="latitude" value="{{ camera_latitude }}" placeholder="41.2963" required>
+            <input class="input" name="longitude" value="{{ camera_longitude }}" placeholder="69.2798" required>
+          </div>
+          <input class="input" name="tags" value="{{ camera_tags|join(', ') }}" placeholder="crosswalk, school-zone, north" style="margin-top:8px;">
+          <button type="submit" class="btn-primary btn-sm" style="margin-top:8px;">{{ t('camera_detail.save_location') }}</button>
+        </form>
+      </div>
+
     </div>
 
     <!-- ── Right: violation log ───────────────────────────────────── -->
     <div>
       <div class="card" style="padding:20px;">
         <div class="panel-header">
-          <div class="card-title">Violation Log</div>
-          <span class="panel-refresh-tag">Auto 3s</span>
+          <div class="card-title">{{ t('camera_detail.violation_log') }}</div>
+          <span class="panel-refresh-tag">{{ t('camera_detail.auto_refresh') }}</span>
         </div>
         <div class="log-wrap" id="violation-log">
-          <div style="text-align:center;padding:36px;color:var(--text-muted);font-size:12px;font-family:var(--font-mono);">Loading…</div>
+          <div style="text-align:center;padding:36px;color:var(--text-muted);font-size:12px;font-family:var(--font-mono);">{{ t('camera_detail.loading') }}</div>
         </div>
         <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border-subtle);">
-          <a href="{{ url_for('admin_violations') }}" class="btn-ghost btn-sm" style="width:100%;justify-content:center;">View Full Log</a>
+          <a href="{{ url_for('admin_violations') }}" class="btn-ghost btn-sm" style="width:100%;justify-content:center;">{{ t('camera_detail.view_full_log') }}</a>
         </div>
       </div>
     </div>
@@ -383,6 +492,10 @@
 
 /* ── Camera-specific API base ────────────────────────────────────────── */
 const CAM = "/admin/cameras/{{ cam_id }}";
+const MAP_LAT = Number({{ camera_latitude }});
+const MAP_LNG = Number({{ camera_longitude }});
+const MAP_LABEL = {{ camera_location_name | tojson }};
+const YANDEX_KEY = {{ yandex_maps_api_key | tojson }};
 
 /* ── State ──────────────────────────────────────────────────────────── */
 let editMode          = false;
@@ -397,6 +510,35 @@ let _currentSource    = "{{ (camera_status.source or demo_source or '') | e }}";
 
 const canvas = document.getElementById("zone-canvas");
 const ctx    = canvas.getContext("2d");
+const I18N = {
+  points: {{ t('camera_detail.points')|tojson }},
+  pointReady: {{ t('camera_detail.point_ready')|tojson }},
+  pointNeed: {{ t('camera_detail.point_need')|tojson }},
+  saveFailed: {{ t('camera_detail.save_failed')|tojson }},
+  addPoints: {{ t('camera_detail.add_points')|tojson }},
+  clearConfirm: {{ t('camera_detail.clear_confirm')|tojson }},
+  zoneActive: {{ t('camera_detail.zone_active')|tojson }},
+  readyDetection: {{ t('camera_detail.ready_detection')|tojson }},
+  noZone: {{ t('camera_detail.no_zone')|tojson }},
+  startDetection: {{ t('live.start_violation_detection')|tojson }},
+  drawSaveFirst: {{ t('live.draw_save_zone_first')|tojson }},
+  noZoneFirst: {{ t('live.no_zone_first')|tojson }},
+  connecting: {{ t('camera_detail.connecting')|tojson }},
+  connectFailed: {{ t('camera_detail.connect_failed')|tojson }},
+  checkSource: {{ t('camera_detail.check_source')|tojson }},
+  detectionWarmup: {{ t('camera_detail.detection_warmup')|tojson }},
+  detectionStartupIssue: {{ t('camera_detail.detection_startup_issue')|tojson }},
+  detectionFailed: {{ t('camera_detail.detection_failed')|tojson }},
+  detectionTimeout: {{ t('camera_detail.detection_timeout')|tojson }},
+  newSourceNotice: {{ t('camera_detail.new_source_notice')|tojson }},
+  resetConfirm: {{ t('camera_detail.reset_confirm')|tojson }},
+  resetDone: {{ t('camera_detail.reset_done')|tojson }},
+  noViolationsYet: {{ t('camera_detail.no_violations_yet')|tojson }},
+  undetected: {{ t('camera_detail.undetected')|tojson }},
+  viewShort: {{ t('camera_detail.view_short')|tojson }},
+  connectBtn: {{ t('camera_detail.connect')|tojson }},
+  connectionFailed: {{ t('live.connection_failed')|tojson }}
+};
 
 /* ── Canvas sizing ──────────────────────────────────────────────────── */
 function syncCanvas() {
@@ -448,7 +590,7 @@ function redrawCanvas() {
   if (editMode) {
     const c = polygonPoints.length;
     document.getElementById("poly-point-count").textContent =
-      `Points: ${c}` + (c >= 4 ? " ✓ ready to save" : ` (need ${4 - c} more)`);
+      `${I18N.points}: ${c}` + (c >= 4 ? ` ✓ ${I18N.pointReady}` : ` (${I18N.pointNeed} ${4 - c})`);
     const editBadge = document.getElementById("edit-badge-text");
     if (editBadge) editBadge.textContent = `Drawing zone — ${c} point${c !== 1 ? "s" : ""}`;
   }
@@ -512,7 +654,7 @@ function undoPoint() { polygonPoints.pop(); redrawCanvas(); }
 
 async function savePolygon() {
   if (polygonPoints.length < 4) {
-    showToast("Add at least 4 points before saving.", 3500); return;
+    showToast(I18N.addPoints, 3500); return;
   }
   const btn = document.getElementById("btn-poly-save"); btn.textContent = "Saving…"; btn.disabled = true;
   try {
@@ -528,13 +670,13 @@ async function savePolygon() {
       showToast(`Zone saved — ${d.count} points. Ready to start detection.`, 3500);
       exitEditMode(true);
     } else {
-      alert("Save failed: " + (d.error || "unknown error"));
+      alert(`${I18N.saveFailed || "Save failed"}: ` + (d.error || "unknown error"));
     }
   } finally { btn.textContent = "✓ Save Zone"; btn.disabled = false; }
 }
 
 async function clearPolygon() {
-  if (!confirm("Clear the saved crosswalk zone for this camera?")) return;
+  if (!confirm(I18N.clearConfirm)) return;
   await fetch(CAM + "/polygon", {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ points: [] })
@@ -572,24 +714,24 @@ function updatePolyStatusBar(hasZone, pointCount) {
   const text = document.getElementById("poly-status-text");
   if (hasZone) {
     bar.className  = "poly-status-bar has-poly";
-    text.textContent = `Crosswalk zone active — ${pointCount} points · Ready for detection`;
+    text.textContent = `${I18N.zoneActive} — ${pointCount} ${I18N.points} · ${I18N.readyDetection}`;
   } else {
     bar.className  = "poly-status-bar no-poly";
-    text.textContent = "No crosswalk zone defined — draw one before starting detection";
+    text.textContent = `${I18N.noZone} — ${I18N.drawSaveFirst}`;
   }
 }
 
 function setDetStartEnabled(enabled) {
   const btn = document.getElementById("btn-det-start");
   btn.disabled = !enabled;
-  btn.title = enabled ? "Start violation detection" : "Draw and save a crosswalk zone first";
+  btn.title = enabled ? I18N.startDetection : I18N.drawSaveFirst;
 }
 
 /* ── Detection start/stop ────────────────────────────────────────────── */
 async function startDetection() {
   // Hard gate: polygon must be saved
   if (!polygonOnServer) {
-    showToast("⚠ No crosswalk zone defined. Draw and save a polygon first.", 5000);
+    showToast(`⚠ ${I18N.noZoneFirst}`, 5000);
     return;
   }
 
@@ -598,7 +740,7 @@ async function startDetection() {
     // Ensure camera is connected
     const st = await fetch(CAM + "/status").then(r => r.json());
     if (!st.connected) {
-      btn.textContent = "Connecting…";
+      btn.textContent = I18N.connecting;
       const input = document.getElementById("cam-source");
       const source = (input ? input.value.trim() : "") || (input ? input.dataset.demoSource : "") || "Videos/v2.mp4";
       const fd = new FormData(); fd.append("source", source);
@@ -613,7 +755,7 @@ async function startDetection() {
         img.src = img.src.split("?")[0] + "?t=" + Date.now(); syncCanvas();
         await new Promise(r => setTimeout(r, 600));
       } else {
-        alert("Could not connect: " + (cd.error || "Check your source."));
+        alert(`${I18N.connectFailed}: ` + (cd.error || I18N.checkSource));
         btn.textContent = "▶ Start Detection"; btn.disabled = false; return;
       }
       btn.textContent = "Starting…";
@@ -627,12 +769,12 @@ async function startDetection() {
     const d = await r.json();
     if (d.ok) {
       setDetectionUI(true);
-      if (d.starting && !d.active) showToast("Detection warming up (loading model)…", 4500);
-      if (d.last_error) alert("Detection startup issue: " + d.last_error);
+      if (d.starting && !d.active) showToast(I18N.detectionWarmup, 4500);
+      if (d.last_error) alert(`${I18N.detectionStartupIssue}: ` + d.last_error);
     } else {
-      alert("Detection failed to start. " + (d.error || d.last_error || "Is the YOLO model available?"));
+      alert(`${I18N.detectionFailed} ` + (d.error || d.last_error || "Is the YOLO model available?"));
     }
-  } catch (e) { alert("Detection start request timed out or failed."); }
+  } catch (e) { alert(I18N.detectionTimeout); }
   finally { btn.textContent = "▶ Start Detection"; btn.disabled = !polygonOnServer; }
 }
 
@@ -670,6 +812,7 @@ async function pollDetectionStatus() {
     document.getElementById("ds-violations").textContent = d.session_violations;
     if (d.active_violation) document.getElementById("violation-alert").classList.add("visible");
     else document.getElementById("violation-alert").classList.remove("visible");
+    refreshPipelineMetrics(d);
     if (!d.active && !d.starting && detectionActive) setDetectionUI(false);
   } catch (e) {}
 }
@@ -708,17 +851,17 @@ async function _onSourceChanged(newSource) {
   setDetStartEnabled(false);
   _knownPlates = new Set();
   document.getElementById("plate-strip").innerHTML =
-    '<span style="font-family:var(--font-mono);font-size:11px;color:var(--text-muted);">No plates detected yet.</span>';
+    `<span style="font-family:var(--font-mono);font-size:11px;color:var(--text-muted);">${I18N.noViolationsYet}</span>`;
   redrawCanvas();
-  showToast("New source connected — draw a crosswalk zone for this view.", 5000);
+  showToast(I18N.newSourceNotice, 5000);
 }
 
 function connectCamera(sourceOverride = null) {
   const source = (sourceOverride || document.getElementById("cam-source").value).trim();
-  const btn = document.getElementById("btn-connect"); btn.textContent = "Connecting…"; btn.disabled = true;
+  const btn = document.getElementById("btn-connect"); btn.textContent = I18N.connecting; btn.disabled = true;
   const fd = new FormData(); fd.append("source", source);
   fetch(CAM + "/start", { method: "POST", body: fd }).then(r => r.json()).then(async d => {
-    btn.textContent = "Connect"; btn.disabled = false;
+    btn.textContent = I18N.connectBtn; btn.disabled = false;
     if (d.ok) {
       const prevSource = _currentSource;
       _currentSource = d.source || source;
@@ -742,10 +885,10 @@ function connectCamera(sourceOverride = null) {
       if (!detectionActive && !editMode && polygonOnServer) startDetection();
     } else {
       setCamBadge(false, "OFFLINE");
-      document.getElementById("cam-error-text").textContent = d.error || "Connection failed.";
+      document.getElementById("cam-error-text").textContent = d.error || I18N.connectionFailed;
       document.getElementById("cam-error").style.display = "";
     }
-  }).catch(() => { btn.textContent = "Connect"; btn.disabled = false; });
+  }).catch(() => { btn.textContent = I18N.connectBtn; btn.disabled = false; });
 }
 
 function disconnectCamera() {
@@ -774,7 +917,7 @@ function setCheck(id, ok) {
   if (parent) { parent.classList.remove("ok", "fail"); parent.classList.add(ok ? "ok" : "fail"); }
 }
 function refreshChecks() {
-  fetch("{{ url_for('admin_live_checks') }}").then(r => r.json()).then(d => {
+  fetch(CAM + "/checks").then(r => r.json()).then(d => {
     const c = d.checks || {};
     setCheck("chk-yolo",  !!(c.yolo      && c.yolo.ok));
     setCheck("chk-cv",    !!(c.opencv    && c.opencv.ok));
@@ -786,11 +929,46 @@ function refreshChecks() {
   });
 }
 
+function refreshPipelineMetrics(d) {
+  if (!d) return;
+  const model = (d.model_detection || "-").split(/[\\/]/).pop() || "-";
+  const plate = d.model_plate || "-";
+  const ocr = (d.ocr_backend || "none") + (d.ocr_gpu ? " GPU" : " CPU");
+  const skip = "1/" + (d.detect_every_n || 1);
+  document.getElementById("diag-model").textContent = model;
+  document.getElementById("diag-plate-model").textContent = plate;
+  document.getElementById("diag-ocr").textContent = ocr;
+  document.getElementById("diag-skip").textContent = skip;
+  document.getElementById("diag-frame-ms").textContent = `${Number(d.avg_frame_ms || 0).toFixed(1)}`;
+  document.getElementById("diag-detect-ms").textContent = `${Number(d.avg_detect_ms || 0).toFixed(1)}`;
+  document.getElementById("diag-ocr-ms").textContent = `${Number(d.avg_ocr_ms || 0).toFixed(1)}`;
+  document.getElementById("diag-obj").textContent = `${d.last_person_count || 0}/${d.last_vehicle_count || 0}`;
+}
+
+async function resetSessionOutput() {
+  if (!confirm(I18N.resetConfirm)) return;
+  const d = await fetch(CAM + "/detection/reset", { method: "POST" }).then(r => r.json()).catch(() => ({}));
+  if (!d.ok) {
+    showToast("Could not clear session output.", 3000);
+    return;
+  }
+  ["ds-ped","ds-veh","ds-ped-zone","ds-veh-zone","ds-violations"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = "0";
+  });
+  document.getElementById("violation-alert").classList.remove("visible");
+  _knownPlates = new Set();
+  document.getElementById("plate-strip").innerHTML =
+    `<span style="font-family:var(--font-mono);font-size:11px;color:var(--text-muted);">${I18N.noViolationsYet}</span>`;
+  refreshPipelineMetrics(d);
+  showToast(I18N.resetDone, 2800);
+}
+
 /* ── Violation log ──────────────────────────────────────────────────── */
 function renderLog(violations) {
   const wrap = document.getElementById("violation-log");
   if (!violations.length) {
-    wrap.innerHTML = `<div style="text-align:center;padding:32px;color:var(--text-muted);font-size:13px;font-family:var(--font-mono);">No violations yet.</div>`;
+    wrap.innerHTML = `<div style="text-align:center;padding:32px;color:var(--text-muted);font-size:13px;font-family:var(--font-mono);">${I18N.noViolationsYet}</div>`;
     return;
   }
   const newest = violations[0];
@@ -801,13 +979,13 @@ function renderLog(violations) {
   _lastViolationId = newest.id;
   wrap.innerHTML = violations.map(v => {
     const ts    = (v.timestamp || "").substring(0, 19).replace("T", " ");
-    const plate = v.plate_number || "UNDETECTED";
+    const plate = v.plate_number || I18N.undetected;
     const sev   = (v.severity || "").toLowerCase();
     const type  = (v.violation_type || "").replace(/_/g, " ");
     return `<div class="log-entry">
       <div class="log-dot ${sev}"></div>
       <div class="log-text"><div class="log-plate">${plate}</div><div class="log-meta">${ts} · ${type}</div></div>
-      <a class="log-link" href="/admin/violations/${v.id}">VIEW</a>
+      <a class="log-link" href="/admin/violations/${v.id}">${I18N.viewShort}</a>
     </div>`;
   }).join("");
 }
@@ -890,6 +1068,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Restore detection UI state if detection was already running
   fetch(CAM + "/detection/status").then(r => r.json()).then(d => {
+    refreshPipelineMetrics(d);
     if (d.active || d.starting) setDetectionUI(true);
   }).catch(() => {});
 
@@ -901,6 +1080,42 @@ document.addEventListener("DOMContentLoaded", () => {
     if (nh === 0 && _prevNatH > 0) img.src = img.src.split("?")[0] + "?t=" + Date.now();
     _prevNatH = nh;
   }, 5000);
+
+  if (YANDEX_KEY) {
+    const s = document.createElement("script");
+    s.src = "https://api-maps.yandex.ru/2.1/?apikey=" + YANDEX_KEY + "&lang=en_US";
+    s.onload = () => {
+      if (typeof ymaps === "undefined") return;
+      ymaps.ready(function() {
+        try {
+          const map = new ymaps.Map("camera-map", {
+            center: [MAP_LAT, MAP_LNG],
+            zoom: 17,
+            type: "yandex#map",
+            controls: ["zoomControl"],
+          });
+          const mark = new ymaps.Placemark(
+            [MAP_LAT, MAP_LNG],
+            { balloonContent: MAP_LABEL, hintContent: MAP_LABEL },
+            { preset: "islands#redCircleDotIcon" }
+          );
+          map.geoObjects.add(mark);
+          const circle = new ymaps.Circle(
+            [[MAP_LAT, MAP_LNG], 35],
+            {},
+            { fillColor: "F5A62320", strokeColor: "F5A623", strokeWidth: 2 }
+          );
+          map.geoObjects.add(circle);
+        } catch (_) {}
+      });
+    };
+    document.head.appendChild(s);
+  } else {
+    const mapEl = document.getElementById("camera-map");
+    if (mapEl) {
+      mapEl.innerHTML = "<div style='padding:24px; color:var(--text-muted); font-size:13px; text-align:center;'>Set YANDEX_MAPS_API_KEY in .env to enable map.</div>";
+    }
+  }
 });
 </script>
 {% endblock %}

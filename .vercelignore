@@ -1,0 +1,21 @@
+# Python env
+.venv/
+CV_venv/
+__pycache__/
+*.pyc
+
+# Local/deploy artifacts and generated data
+artifacts/
+static/snapshots/
+Videos/
+crosswalk_violations.db
+
+# Large model/notebook files not needed for web route hosting
+yolov8n.pt
+yolov8x.pt
+models/*.pt
+models/*.ipynb
+
+# VCS and editor
+.git/
+.vscode/

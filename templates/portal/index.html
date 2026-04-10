@@ -13,14 +13,36 @@
   <!-- Minimal header -->
   <header class="portal-header">
     <a href="{{ url_for('portal') }}" class="portal-brand">
-      <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
-        <rect x="1" y="5" width="11" height="8" rx="1.5" stroke="currentColor" stroke-width="1.5"/>
-        <path d="M12 8.5L17 6v7l-5-2.5" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
-        <circle cx="5.5" cy="9" r="1.5" fill="currentColor"/>
-      </svg>
-      WIUT Traffic Enforcement
+      <img src="{{ url_for('static', filename='img/wiut-logo.svg') }}" alt="WIUT logo" style="width:16px;height:16px;display:block;flex-shrink:0;">
+      {{ t('portal.brand') }}
     </a>
   </header>
+
+  <!-- Add language switcher for portal (since nav block is overridden) -->
+  <div style="position:fixed; top:14px; right:20px; z-index:800;">
+    <div class="lang-switcher" style="position:relative;">
+      <button class="lang-btn" onclick="this.nextElementSibling.classList.toggle('open')" title="{{ t('lang.choose') }}">
+        <svg width="13" height="13" viewBox="0 0 20 20" fill="none">
+          <circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="1.5"/>
+          <path d="M10 2C10 2 7 6 7 10s3 8 3 8" stroke="currentColor" stroke-width="1.2"/>
+          <path d="M10 2c0 0 3 4 3 8s-3 8-3 8" stroke="currentColor" stroke-width="1.2"/>
+          <path d="M2 10h16" stroke="currentColor" stroke-width="1.2"/>
+        </svg>
+        <span>{{ SUPPORTED_LANGS[lang] }}</span>
+        <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+          <path d="M2 3.5l3 3 3-3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+        </svg>
+      </button>
+      <div class="lang-dropdown">
+        {% for code, label in SUPPORTED_LANGS.items() %}
+        <a href="{{ url_for('set_language', lang=code, next=request.url) }}"
+           class="lang-option {% if code == lang %}active{% endif %}">
+          {{ label }}
+        </a>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
 
   <!-- Center card -->
   <div class="portal-center">
@@ -37,9 +59,9 @@
         </svg>
       </div>
 
-      <div class="portal-title">Check Your Violation</div>
+      <div class="portal-title">{{ t('portal.check_title') }}</div>
       <div class="portal-subtitle">
-        Enter the license plate number from your vehicle notice
+        {{ t('portal.check_subtitle') }}
       </div>
 
       {% if error %}
@@ -61,14 +83,13 @@
         <p class="plate-hint">Example: 01A234BC</p>
 
         <button type="submit" id="search-btn" class="btn-primary btn-search">
-          <span class="btn-text">Search</span>
+          <span class="btn-text">{{ t('portal.search') }}</span>
           <span class="btn-spinner"></span>
         </button>
       </form>
 
       <div class="privacy-notice">
-        This portal only displays information relevant to the entered plate number.
-        No other vehicle data is accessible.
+        {{ t('portal.privacy') }}
       </div>
 
     </div>
@@ -77,7 +98,7 @@
   <!-- How it works / demo section -->
   <div class="portal-demo-section">
 
-    <div class="portal-demo-title">How It Works</div>
+    <div class="portal-demo-title">{{ t('portal.how_it_works') }}</div>
 
     <div class="portal-steps">
       <div class="portal-step">
@@ -88,8 +109,8 @@
             <circle cx="5.5" cy="6.5" r="1.2" fill="currentColor"/>
           </svg>
         </div>
-        <div class="portal-step-label">Detected by camera</div>
-        <div class="portal-step-desc">AI-powered traffic cameras identify your vehicle at the crosswalk</div>
+        <div class="portal-step-label">{{ t('portal.step1_label') }}</div>
+        <div class="portal-step-desc">{{ t('portal.step1_desc') }}</div>
       </div>
       <div class="portal-step-arrow">→</div>
       <div class="portal-step">
@@ -175,7 +196,7 @@
   </div>
 
   <footer class="site-footer" style="border-top:1px solid var(--border);">
-    WIUT Traffic Enforcement System &middot; {{ current_year }}
+    {{ t('footer.text') }} &middot; {{ current_year }}
   </footer>
 
 </div>

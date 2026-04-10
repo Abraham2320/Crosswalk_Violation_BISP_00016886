@@ -6,7 +6,8 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
 
 /* â”€â”€ CSS Variables (shadcn/ui dark palette) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
-:root {
+:root,
+[data-theme="dark"] {
   /* Background layers */
   --bg-primary:         hsl(224 71% 4%);
   --bg-card:            hsl(224 71% 6%);
@@ -66,6 +67,45 @@
   --shadow-glow-green:0 0 0 1px hsla(160,60%,45%,0.12),0 4px 16px hsla(160,60%,45%,0.08);
 }
 
+[data-theme="light"] {
+  --bg-primary:         hsl(42 40% 97%);
+  --bg-card:            hsl(0 0% 100%);
+  --bg-elevated:        hsl(40 50% 99%);
+  --bg-glass:           hsla(38, 55%, 97%, 0.88);
+  --bg-muted:           hsl(39 44% 94%);
+  --bg-popover:         hsl(0 0% 100%);
+
+  --border:             hsl(34 24% 84%);
+  --border-subtle:      hsl(35 23% 90%);
+  --border-active:      hsl(35 87% 45%);
+  --border-glow:        hsla(35, 87%, 45%, 0.25);
+  --border-input:       hsl(34 20% 80%);
+
+  --text-primary:       hsl(221 28% 18%);
+  --text-secondary:     hsl(219 13% 36%);
+  --text-muted:         hsl(216 10% 48%);
+  --text-disabled:      hsl(214 8% 65%);
+
+  --accent-amber:       hsl(35 92% 45%);
+  --accent-amber-dim:   hsla(35, 92%, 45%, 0.12);
+  --accent-amber-glow:  hsla(35, 92%, 45%, 0.20);
+  --accent-red:         hsl(0 75% 54%);
+  --accent-red-dim:     hsla(0, 75%, 54%, 0.10);
+  --accent-red-glow:    hsla(0, 75%, 54%, 0.16);
+  --accent-green:       hsl(157 63% 35%);
+  --accent-green-dim:   hsla(157, 63%, 35%, 0.12);
+  --accent-green-glow:  hsla(157, 63%, 35%, 0.16);
+  --accent-blue:        hsl(215 89% 47%);
+  --accent-blue-dim:    hsla(215, 89%, 47%, 0.10);
+
+  --shadow-sm:          0 1px 2px rgba(15, 23, 42, 0.08);
+  --shadow-card:        0 1px 2px rgba(15, 23, 42, 0.06), 0 10px 25px rgba(15, 23, 42, 0.05);
+  --shadow-lg:          0 20px 40px rgba(15, 23, 42, 0.10), 0 6px 18px rgba(15, 23, 42, 0.07);
+  --shadow-glow-amber:  0 0 0 1px hsla(35,92%,45%,0.11), 0 8px 22px hsla(35,92%,45%,0.10);
+  --shadow-glow-red:    0 0 0 1px hsla(0,75%,54%,0.10), 0 8px 20px hsla(0,75%,54%,0.08);
+  --shadow-glow-green:  0 0 0 1px hsla(157,63%,35%,0.10), 0 8px 20px hsla(157,63%,35%,0.08);
+}
+
 /* â”€â”€ Reset â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -73,6 +113,7 @@ html { font-size: 14px; scroll-behavior: smooth; }
 
 body {
   background-color: var(--bg-primary);
+  background-image: radial-gradient(1200px 700px at 100% -20%, var(--accent-amber-dim), transparent 62%);
   color: var(--text-primary);
   font-family: var(--font-body);
   font-size: 14px;
@@ -90,7 +131,7 @@ a:hover { text-decoration: underline; opacity: 0.9; }
   position: fixed;
   top: 0; left: 0; right: 0;
   height: 56px;
-  background: hsla(224, 71%, 4%, 0.97);
+  background: var(--bg-glass);
   border-bottom: 1px solid var(--border);
   display: flex;
   align-items: center;
@@ -139,12 +180,12 @@ a:hover { text-decoration: underline; opacity: 0.9; }
 }
 .nav-link:hover {
   color: var(--text-primary);
-  background: hsl(224 71% 9%);
+  background: var(--bg-muted);
   text-decoration: none;
 }
 .nav-link.active {
   color: var(--text-primary);
-  background: hsl(224 71% 10%);
+  background: var(--bg-elevated);
   font-weight: 600;
 }
 .nav-link.active::after { display: none; }
@@ -193,7 +234,6 @@ a:hover { text-decoration: underline; opacity: 0.9; }
   color: var(--text-muted);
 }
 
-/* â”€â”€ Cards  â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .card {
   background: var(--bg-card);
   border: 1px solid var(--border);
@@ -203,7 +243,7 @@ a:hover { text-decoration: underline; opacity: 0.9; }
   transition: border-color var(--transition), box-shadow var(--transition);
 }
 .card:hover {
-  border-color: hsl(216 34% 22%);
+  border-color: var(--border-input);
 }
 
 .card-title {
@@ -229,7 +269,7 @@ a:hover { text-decoration: underline; opacity: 0.9; }
 }
 .stat-card::before { display: none; }
 .stat-card:hover {
-  border-color: hsl(216 34% 28%);
+  border-color: var(--border-input);
   box-shadow: var(--shadow-lg), 0 0 0 1px hsla(38,92%,53%,0.07), 0 6px 24px hsla(38,92%,53%,0.06);
   transform: translateY(-1px);
 }

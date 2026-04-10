@@ -10,7 +10,7 @@
 
   <div class="page-header" style="display:flex; align-items:center; gap:16px;">
     <a href="{{ url_for('admin_violations') }}" class="btn-circle-link">
-      <span class="c-arrow">←</span> Back to Log
+      <span class="c-arrow">←</span> {{ t('violation_detail.back') }}
     </a>
     <div>
       <div class="page-title">
@@ -26,7 +26,7 @@
 
     <!-- ── Left: Snapshot ───────────────────────────────── -->
     <div class="snapshot-container">
-      <div class="snapshot-label">Violation Frame</div>
+          <span class="snapshot-label">{{ t('violation_detail.violation_frame') }}</span>
 
       {% if violation.snapshot_path %}
         <img
@@ -44,7 +44,7 @@
             <path d="M6 6l36 36" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
           </svg>
           <span style="font-family:var(--font-display); font-size:13px; letter-spacing:0.06em; text-transform:uppercase;">
-            Snapshot Unavailable
+            {{ t('violation_detail.snapshot_unavailable') }}
           </span>
         </div>
       {% endif %}
@@ -60,7 +60,7 @@
     {% if violation.plate_crop_path %}
     <!-- ── Plate Crop ─────────────────────────────────── -->
     <div class="snapshot-container" style="margin-top:16px;">
-      <div class="snapshot-label">Detected Plate</div>
+      <div class="snapshot-label">{{ t('violation_detail.detected_plate') }}</div>
       <img
         src="{{ url_for('static', filename=violation.plate_crop_path) }}"
         alt="Plate crop"
@@ -79,9 +79,9 @@
           {{ (violation.violation_type or '').replace('_',' ') }}
         </div>
         {% if violation.severity == 'HIGH' %}
-          <span class="badge badge-high pulse-amber">High Severity</span>
+          <span class="badge badge-high pulse-amber">{{ t('violation_detail.high_severity') }}</span>
         {% else %}
-          <span class="badge badge-low">Low Severity</span>
+          <span class="badge badge-low">{{ t('violation_detail.low_severity') }}</span>
         {% endif %}
       </div>
 
@@ -90,14 +90,14 @@
       <div class="detail-list">
 
         <div class="detail-row">
-          <span class="detail-key">Violation ID</span>
+          <span class="detail-key">{{ t('violation_detail.violation_id') }}</span>
           <span class="detail-value" style="font-size:11px; word-break:break-all;">
             #{{ violation.id }}
           </span>
         </div>
 
         <div class="detail-row">
-          <span class="detail-key">Timestamp</span>
+          <span class="detail-key">{{ t('violation_detail.timestamp') }}</span>
           <span class="detail-value">
             {% if violation.timestamp %}
               {{ violation.timestamp[:19].replace('T',' ') }}
@@ -106,30 +106,30 @@
         </div>
 
         <div class="detail-row">
-          <span class="detail-key">Plate Number</span>
+          <span class="detail-key">{{ t('violation_detail.plate') }}</span>
           <span class="detail-value {% if not violation.plate_number %}muted{% endif %}">
             {% if violation.plate_number %}
               {{ violation.plate_number }}
             {% else %}
-              <span style="color:rgba(239,68,68,0.6);">UNDETECTED</span>
+              <span style="color:rgba(239,68,68,0.6);">{{ t('invoice.undetected') }}</span>
             {% endif %}
           </span>
         </div>
 
         <div class="detail-row">
-          <span class="detail-key">Vehicle ID</span>
+          <span class="detail-key">{{ t('violation_detail.vehicle') }}</span>
           <span class="detail-value">VEH-{{ violation.vehicle_id }}</span>
         </div>
 
         <div class="detail-row">
-          <span class="detail-key">Location</span>
+          <span class="detail-key">{{ t('violation_detail.location') }}</span>
           <span class="detail-value">
             {{ violation.display_location or '—' }}
           </span>
         </div>
 
         <div class="detail-row">
-          <span class="detail-key">Confidence</span>
+          <span class="detail-key">{{ t('violation_detail.confidence') }}</span>
           <span class="detail-value">
             {% set conf_pct = (violation.confidence * 100) | round | int if violation.confidence else 0 %}
             {% if conf_pct >= 80 %}{% set cc = 'var(--accent-green)' %}
@@ -140,7 +140,7 @@
         </div>
 
         <div class="detail-row">
-          <span class="detail-key">Speed Est.</span>
+          <span class="detail-key">{{ t('invoice.speed_est') }}</span>
           <span class="detail-value">
             {% if violation.vehicle_speed_estimate %}
               {{ violation.vehicle_speed_estimate | round(2) }} px/frame
@@ -151,14 +151,14 @@
         </div>
 
         <div class="detail-row">
-          <span class="detail-key">Type</span>
+          <span class="detail-key">{{ t('violation_detail.type') }}</span>
           <span class="detail-value">
             {{ (violation.violation_type or '').replace('_',' ') }}
           </span>
         </div>
 
         <div class="detail-row">
-          <span class="detail-key">Status</span>
+          <span class="detail-key">{{ t('invoice.status') }}</span>
           <span class="detail-value">
             {% if violation.status == 'processed' %}
               <span class="badge badge-ok">{{ violation.status }}</span>
@@ -177,23 +177,23 @@
       <!-- Action buttons -->
       <div style="display:flex; gap:10px; flex-wrap:wrap;">
         <a href="{{ url_for('admin_violations') }}" class="btn-ghost btn-sm">
-          &larr; All Violations
+          &larr; {{ t('invoice.all_violations') }}
         </a>
         {% if violation.plate_number %}
         <a href="{{ url_for('admin_vehicle_detail', identifier=violation.plate_number) }}"
            class="btn-primary btn-sm">
-          Vehicle History
+           {{ t('vehicles.history_title') }}
         </a>
         {% else %}
         <a href="{{ url_for('admin_vehicle_detail', identifier=violation.vehicle_id|string) }}"
            class="btn-primary btn-sm">
-          Vehicle History
+           {{ t('vehicles.history_title') }}
         </a>
         {% endif %}
         <a href="{{ url_for('admin_invoice', violation_id=violation.id) }}"
            class="btn-ghost btn-sm"
            style="border-color:var(--accent-amber); color:var(--accent-amber);">
-          &#128438; Generate Invoice
+           &#128438; {{ t('violation_detail.view_invoice') }}
         </a>
       </div>
 
@@ -204,7 +204,7 @@
         <div style="font-family:var(--font-display); font-size:10px; font-weight:600;
                     letter-spacing:0.1em; text-transform:uppercase;
                     color:var(--accent-amber); margin-bottom:8px;">
-          Location Map
+          {{ t('invoice.location') }}
         </div>
         <div id="detail-map"
              style="width:100%; height:220px; border-radius:var(--radius);
@@ -241,7 +241,7 @@
         <div style="font-family:var(--font-mono); font-size:11px; color:var(--text-muted); margin-top:6px;">
           Set <code style="color:var(--accent-amber);">YANDEX_MAPS_API_KEY</code> in .env to embed the map.
           <a href="https://yandex.com/maps/?ll={{ violation.longitude }},{{ violation.latitude }}&z=17&pt={{ violation.longitude }},{{ violation.latitude }},pm2rdm"
-             target="_blank" rel="noopener noreferrer" style="margin-left:8px;">Open in Yandex Maps ↗</a>
+             target="_blank" rel="noopener noreferrer" style="margin-left:8px;">{{ t('invoice.open_yandex') }} ↗</a>
         </div>
         {% endif %}
       </div>

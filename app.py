@@ -16,6 +16,7 @@ import csv
 import io
 import json
 import math
+import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -29,6 +30,7 @@ from flask import (
     session,
     url_for,
 )
+from werkzeug.security import generate_password_hash
 
 from auth import (
     LOCKOUT_MINUTES,
@@ -41,6 +43,7 @@ from auth import (
 )
 from database import db_connection, init_db, log_audit
 from live_processor import live_proc, proc_registry
+from src.i18n import get_locale, t_for, SUPPORTED_LANGS
 from stream import camera_manager, mjpeg_generator, registry as cam_registry, CAMERA_CONFIGS
 
 try:
@@ -88,6 +91,51 @@ def _admin() -> str:
 def _disp_location(v: dict) -> str:
     """Prefer location_name, fall back to location."""
     return v.get("location_name") or v.get("location") or ""
+
+
+_CAM_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{2,32}$")
+
+
+def _camera_rows() -> list[dict]:
+    with db_connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT cam_id, label, default_source, demo_source,
+                   location_name, latitude, longitude, tags
+            FROM cameras
+            WHERE is_active = 1
+            ORDER BY cam_id
+            """
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def _refresh_camera_configs() -> None:
+    """Replace in-memory camera configs from DB so routes/UI use current cameras."""
+    rows = _camera_rows()
+    CAMERA_CONFIGS.clear()
+    for r in rows:
+        CAMERA_CONFIGS[r["cam_id"]] = {
+            "label": r["label"],
+            "source": r["default_source"],
+            "demo": r["demo_source"] or "",
+            "location_name": r.get("location_name") or "Crosswalk A",
+            "latitude": float(r.get("latitude") or 41.2963),
+            "longitude": float(r.get("longitude") or 69.2798),
+            "tags": [t.strip() for t in (r.get("tags") or "").split(",") if t.strip()],
+        }
+
+
+def _all_admin_users() -> list[dict]:
+    with db_connection() as conn:
+        rows = conn.execute(
+            "SELECT id, username, created_at FROM admin_users ORDER BY username"
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+# Sync runtime multi-camera config with DB on startup.
+_refresh_camera_configs()
 
 
 def _chat_db_context() -> str:
@@ -187,6 +235,20 @@ def portal_lookup():
 
 
 # ---------------------------------------------------------------------------
+# ── LANGUAGE SWITCHER ────────────────────────────────────────────────────────
+# ---------------------------------------------------------------------------
+
+@app.route("/set-language")
+def set_language():
+    lang = request.args.get("lang", "en")
+    if lang not in SUPPORTED_LANGS:
+        lang = "en"
+    session["lang"] = lang
+    next_url = request.args.get("next") or request.referrer or url_for("index")
+    return redirect(next_url)
+
+
+# ---------------------------------------------------------------------------
 # ── ADMIN AUTH ───────────────────────────────────────────────────────────────
 # ---------------------------------------------------------------------------
 
@@ -234,6 +296,69 @@ def admin_login():
 def admin_logout():
     session.clear()
     return redirect(url_for("admin_login"))
+
+
+@app.route("/admin/admins")
+@login_required
+def admin_admins():
+    users = _all_admin_users()
+    return render_template(
+        "admin/admins.html",
+        admins=users,
+        error=request.args.get("error", ""),
+        ok=request.args.get("ok", ""),
+    )
+
+
+@app.route("/admin/admins/add", methods=["POST"])
+@login_required
+def admin_admins_add():
+    username = request.form.get("username", "").strip()
+    password = request.form.get("password", "")
+
+    if not re.fullmatch(r"[A-Za-z0-9_.-]{3,32}", username):
+        return redirect(url_for("admin_admins", error="invalid-username"))
+    if len(password) < 8:
+        return redirect(url_for("admin_admins", error="weak-password"))
+
+    with db_connection() as conn:
+        exists = conn.execute(
+            "SELECT 1 FROM admin_users WHERE username = ?",
+            (username,),
+        ).fetchone()
+        if exists:
+            return redirect(url_for("admin_admins", error="username-exists"))
+        conn.execute(
+            "INSERT INTO admin_users (username, password_hash) VALUES (?, ?)",
+            (username, generate_password_hash(password)),
+        )
+
+    log_audit("ADMIN_USER_ADD", target=username, username=_admin())
+    return redirect(url_for("admin_admins", ok="admin-added"))
+
+
+@app.route("/admin/admins/<int:admin_id>/delete", methods=["POST"])
+@login_required
+def admin_admins_delete(admin_id: int):
+    with db_connection() as conn:
+        target = conn.execute(
+            "SELECT id, username FROM admin_users WHERE id = ?",
+            (admin_id,),
+        ).fetchone()
+        if target is None:
+            return redirect(url_for("admin_admins", error="admin-not-found"))
+
+        if target["username"] == _admin():
+            return redirect(url_for("admin_admins", error="cannot-delete-self"))
+
+        total_admins = conn.execute("SELECT COUNT(*) FROM admin_users").fetchone()[0]
+        if total_admins <= 1:
+            return redirect(url_for("admin_admins", error="last-admin"))
+
+        conn.execute("DELETE FROM admin_users WHERE id = ?", (admin_id,))
+
+    log_audit("ADMIN_USER_DELETE", target=target["username"], username=_admin())
+    return redirect(url_for("admin_admins", ok="admin-deleted"))
 
 
 # ---------------------------------------------------------------------------
@@ -610,10 +735,15 @@ def admin_audit():
 
 @app.context_processor
 def inject_globals():
+    lang = get_locale()
     return {
-        "current_year":     datetime.now(timezone.utc).year,
-        "yandex_maps_key":  os.getenv("YANDEX_MAPS_API_KEY", ""),
+        "current_year":          datetime.now(timezone.utc).year,
+        "yandex_maps_key":       os.getenv("YANDEX_MAPS_API_KEY", ""),
         "camera_source_default": os.getenv("CAMERA_SOURCE", "0"),
+        # i18n
+        "t":                     t_for(lang),
+        "lang":                  lang,
+        "SUPPORTED_LANGS":       SUPPORTED_LANGS,
     }
 
 
@@ -675,9 +805,7 @@ def admin_live_status():
     return jsonify(**camera_manager.status())
 
 
-@app.route("/admin/live/checks")
-@login_required
-def admin_live_checks():
+def _build_pipeline_checks(cam_connected: bool, cam_source: str, proc_obj) -> dict:
     checks = {}
 
     try:
@@ -714,8 +842,8 @@ def admin_live_checks():
     except Exception as exc:
         checks["fsm_rules"] = {"ok": False, "detail": f"Rules import failed: {exc}"}
 
-    pipeline_initialized = getattr(live_proc, "_pipeline", None) is not None
-    pipeline_error = getattr(live_proc, "last_error", "")
+    pipeline_initialized = getattr(proc_obj, "_pipeline", None) is not None
+    pipeline_error = getattr(proc_obj, "last_error", "")
     checks["pipeline"] = {
         "ok": pipeline_initialized or not bool(pipeline_error),
         "detail": (
@@ -728,10 +856,21 @@ def admin_live_checks():
     }
 
     checks["camera"] = {
-        "ok": camera_manager.status().get("connected", False),
-        "detail": camera_manager.status().get("source") or "No source connected",
+        "ok": bool(cam_connected),
+        "detail": cam_source or "No source connected",
     }
+    return checks
 
+
+@app.route("/admin/live/checks")
+@login_required
+def admin_live_checks():
+    cam_status = camera_manager.status()
+    checks = _build_pipeline_checks(
+        cam_connected=cam_status.get("connected", False),
+        cam_source=cam_status.get("source") or "",
+        proc_obj=live_proc,
+    )
     return jsonify(ok=all(v.get("ok") for v in checks.values()), checks=checks)
 
 
@@ -806,6 +945,29 @@ def admin_live_detection_start():
         return jsonify(
             ok=False,
             error="Camera is not connected. Connect a source first.",
+            **live_proc.get_stats(),
+        ), 400
+
+    # Require a valid saved polygon before detection can start.
+    polygon_path = PROJECT_ROOT / "crosswalk_polygon.json"
+    if not polygon_path.exists():
+        return jsonify(
+            ok=False,
+            error="No crosswalk zone defined. Draw and save a polygon first.",
+            **live_proc.get_stats(),
+        ), 400
+    try:
+        pts = json.loads(polygon_path.read_text())
+        if not isinstance(pts, list) or len(pts) < 4:
+            return jsonify(
+                ok=False,
+                error="Crosswalk zone has fewer than 4 points. Re-draw the polygon.",
+                **live_proc.get_stats(),
+            ), 400
+    except Exception:
+        return jsonify(
+            ok=False,
+            error="Polygon file is invalid. Re-draw the zone.",
             **live_proc.get_stats(),
         ), 400
 
@@ -974,6 +1136,7 @@ def inject_global_vars():
 @login_required
 def admin_cameras():
     """Camera overview grid — one card per configured camera."""
+    _refresh_camera_configs()
     statuses = {}
     for cam_id, cfg in CAMERA_CONFIGS.items():
         cam  = cam_registry.get(cam_id)
@@ -983,13 +1146,150 @@ def admin_cameras():
             "stream":     cam.status(),
             "detection":  proc.get_stats(),
         }
-    return render_template("admin/cameras.html", camera_statuses=statuses)
+    return render_template(
+        "admin/cameras.html",
+        camera_statuses=statuses,
+        error=request.args.get("error", ""),
+        ok=request.args.get("ok", ""),
+    )
+
+
+@app.route("/admin/cameras/add", methods=["POST"])
+@login_required
+def admin_cameras_add():
+    cam_id = request.form.get("cam_id", "").strip()
+    label = request.form.get("label", "").strip()
+    source = request.form.get("source", "").strip() or "0"
+    demo_source = request.form.get("demo_source", "").strip()
+    location_name = request.form.get("location_name", "").strip() or label
+    tags_raw = request.form.get("tags", "").strip()
+    lat_raw = request.form.get("latitude", "").strip() or "41.2963"
+    lng_raw = request.form.get("longitude", "").strip() or "69.2798"
+
+    if not _CAM_ID_PATTERN.fullmatch(cam_id):
+        return redirect(url_for("admin_cameras", error="invalid-cam-id"))
+    if not label:
+        return redirect(url_for("admin_cameras", error="label-required"))
+
+    try:
+        latitude = float(lat_raw)
+        longitude = float(lng_raw)
+    except ValueError:
+        return redirect(url_for("admin_cameras", error="invalid-location"))
+
+    if not (-90.0 <= latitude <= 90.0 and -180.0 <= longitude <= 180.0):
+        return redirect(url_for("admin_cameras", error="invalid-location"))
+
+    tags = ", ".join([t.strip() for t in tags_raw.split(",") if t.strip()])
+
+    with db_connection() as conn:
+        exists = conn.execute(
+            "SELECT 1 FROM cameras WHERE cam_id = ?",
+            (cam_id,),
+        ).fetchone()
+        if exists:
+            return redirect(url_for("admin_cameras", error="cam-id-exists"))
+
+        conn.execute(
+            """
+            INSERT INTO cameras (
+                cam_id, label, default_source, demo_source,
+                location_name, latitude, longitude, tags, is_active
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
+            """,
+            (cam_id, label, source, demo_source, location_name, latitude, longitude, tags),
+        )
+
+    _refresh_camera_configs()
+    log_audit("CAMERA_ADD", target=f"{cam_id}:{source}", username=_admin())
+    return redirect(url_for("admin_cameras", ok="camera-added"))
+
+
+@app.route("/admin/cameras/<string:cam_id>/location", methods=["POST"])
+@login_required
+def admin_camera_location_update(cam_id: str):
+    if cam_id not in CAMERA_CONFIGS:
+        return redirect(url_for("admin_cameras", error="camera-not-found"))
+
+    location_name = request.form.get("location_name", "").strip() or CAMERA_CONFIGS[cam_id].get("label", cam_id)
+    tags_raw = request.form.get("tags", "").strip()
+    lat_raw = request.form.get("latitude", "").strip()
+    lng_raw = request.form.get("longitude", "").strip()
+
+    try:
+        latitude = float(lat_raw)
+        longitude = float(lng_raw)
+    except ValueError:
+        return redirect(url_for("admin_camera_detail", cam_id=cam_id, error="invalid-location"))
+
+    if not (-90.0 <= latitude <= 90.0 and -180.0 <= longitude <= 180.0):
+        return redirect(url_for("admin_camera_detail", cam_id=cam_id, error="invalid-location"))
+
+    tags = ", ".join([t.strip() for t in tags_raw.split(",") if t.strip()])
+
+    with db_connection() as conn:
+        conn.execute(
+            """
+            UPDATE cameras
+            SET location_name = ?, latitude = ?, longitude = ?, tags = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE cam_id = ?
+            """,
+            (location_name, latitude, longitude, tags, cam_id),
+        )
+
+    _refresh_camera_configs()
+    log_audit("CAMERA_LOCATION_UPDATE", target=f"{cam_id}:{location_name}", username=_admin())
+    return redirect(url_for("admin_camera_detail", cam_id=cam_id, ok="location-updated"))
+
+
+@app.route("/admin/cameras/<string:cam_id>/delete", methods=["POST"])
+@login_required
+def admin_cameras_delete(cam_id: str):
+    with db_connection() as conn:
+        row = conn.execute(
+            "SELECT cam_id FROM cameras WHERE cam_id = ? AND is_active = 1",
+            (cam_id,),
+        ).fetchone()
+        if row is None:
+            return redirect(url_for("admin_cameras", error="camera-not-found"))
+
+        active_count = conn.execute(
+            "SELECT COUNT(*) FROM cameras WHERE is_active = 1"
+        ).fetchone()[0]
+        if active_count <= 1:
+            return redirect(url_for("admin_cameras", error="last-camera"))
+
+        conn.execute("DELETE FROM cameras WHERE cam_id = ?", (cam_id,))
+
+    try:
+        cam_registry.get(cam_id).stop()
+    except Exception:
+        pass
+    try:
+        proc_registry.get(cam_id).stop()
+    except Exception:
+        pass
+
+    poly_path = PROJECT_ROOT / (
+        "crosswalk_polygon.json"
+        if cam_id in ("cam2", "default")
+        else f"crosswalk_polygon_{cam_id}.json"
+    )
+    if poly_path.exists():
+        poly_path.unlink()
+
+    _refresh_camera_configs()
+    log_audit("CAMERA_DELETE", target=cam_id, username=_admin())
+    return redirect(url_for("admin_cameras", ok="camera-deleted"))
 
 
 @app.route("/admin/cameras/<string:cam_id>")
 @login_required
 def admin_camera_detail(cam_id: str):
     """Per-camera live page (detection + polygon editor)."""
+    _refresh_camera_configs()
     if cam_id not in CAMERA_CONFIGS:
         return render_template("admin/404.html"), 404
     cam  = cam_registry.get(cam_id)
@@ -1001,8 +1301,14 @@ def admin_camera_detail(cam_id: str):
         cam_id=cam_id,
         cam_label=cfg.get("label", cam_id),
         demo_source=demo,
+        camera_location_name=cfg.get("location_name", cfg.get("label", cam_id)),
+        camera_latitude=cfg.get("latitude", 41.2963),
+        camera_longitude=cfg.get("longitude", 69.2798),
+        camera_tags=cfg.get("tags", []),
         camera_status=cam.status(),
         detection_stats=proc.get_stats(),
+        error=request.args.get("error", ""),
+        ok=request.args.get("ok", ""),
     )
 
 
@@ -1010,6 +1316,8 @@ def admin_camera_detail(cam_id: str):
 @login_required
 def admin_camera_feed(cam_id: str):
     """MJPEG stream for one camera."""
+    if cam_id not in CAMERA_CONFIGS:
+        return jsonify(ok=False, error="Unknown camera"), 404
     cam = cam_registry.get(cam_id)
     return Response(
         mjpeg_generator(cam),
@@ -1021,6 +1329,8 @@ def admin_camera_feed(cam_id: str):
 @login_required
 def admin_camera_snapshot(cam_id: str):
     """Single JPEG frame — used for polygon calibration freeze-frame."""
+    if cam_id not in CAMERA_CONFIGS:
+        return jsonify(ok=False, error="Unknown camera"), 404
     cam = cam_registry.get(cam_id)
     return Response(cam.get_jpeg(), mimetype="image/jpeg",
                     headers={"Cache-Control": "no-store"})
@@ -1032,7 +1342,11 @@ def admin_camera_start(cam_id: str):
     cfg    = CAMERA_CONFIGS.get(cam_id)
     if cfg is None:
         return jsonify(ok=False, error="Unknown camera"), 404
-    source = request.form.get("source", "").strip() or cfg.get("demo", "0")
+    source = (
+        request.form.get("source", "").strip()
+        or cfg.get("source", "").strip()
+        or cfg.get("demo", "0")
+    )
     cam    = cam_registry.get(cam_id)
     ok     = cam.start(source)
     log_audit("CAMERA_START", target=f"{cam_id}:{source}", username=_admin())
@@ -1042,6 +1356,8 @@ def admin_camera_start(cam_id: str):
 @app.route("/admin/cameras/<string:cam_id>/stop", methods=["POST"])
 @login_required
 def admin_camera_stop(cam_id: str):
+    if cam_id not in CAMERA_CONFIGS:
+        return jsonify(ok=False, error="Unknown camera"), 404
     cam = cam_registry.get(cam_id)
     cam.stop()
     log_audit("CAMERA_STOP", target=cam_id, username=_admin())
@@ -1051,6 +1367,8 @@ def admin_camera_stop(cam_id: str):
 @app.route("/admin/cameras/<string:cam_id>/status")
 @login_required
 def admin_camera_status(cam_id: str):
+    if cam_id not in CAMERA_CONFIGS:
+        return jsonify(ok=False, error="Unknown camera"), 404
     return jsonify(**cam_registry.get(cam_id).status())
 
 
@@ -1085,6 +1403,8 @@ def admin_camera_detection_start(cam_id: str):
 @app.route("/admin/cameras/<string:cam_id>/detection/stop", methods=["POST"])
 @login_required
 def admin_camera_detection_stop(cam_id: str):
+    if cam_id not in CAMERA_CONFIGS:
+        return jsonify(ok=False, error="Unknown camera"), 404
     proc = proc_registry.get(cam_id)
     proc.stop()
     log_audit("DETECTION_STOP", target=cam_id, username=_admin())
@@ -1094,12 +1414,43 @@ def admin_camera_detection_stop(cam_id: str):
 @app.route("/admin/cameras/<string:cam_id>/detection/status")
 @login_required
 def admin_camera_detection_status(cam_id: str):
+    if cam_id not in CAMERA_CONFIGS:
+        return jsonify(ok=False, error="Unknown camera"), 404
     return jsonify(**proc_registry.get(cam_id).get_stats())
+
+
+@app.route("/admin/cameras/<string:cam_id>/detection/reset", methods=["POST"])
+@login_required
+def admin_camera_detection_reset(cam_id: str):
+    if cam_id not in CAMERA_CONFIGS:
+        return jsonify(ok=False, error="Unknown camera"), 404
+    proc = proc_registry.get(cam_id)
+    proc.reset_session_outputs()
+    log_audit("DETECTION_RESET", target=cam_id, username=_admin())
+    return jsonify(ok=True, **proc.get_stats())
+
+
+@app.route("/admin/cameras/<string:cam_id>/checks")
+@login_required
+def admin_camera_checks(cam_id: str):
+    if cam_id not in CAMERA_CONFIGS:
+        return jsonify(ok=False, error="Unknown camera"), 404
+    cam = cam_registry.get(cam_id)
+    proc = proc_registry.get(cam_id)
+    cam_status = cam.status()
+    checks = _build_pipeline_checks(
+        cam_connected=cam_status.get("connected", False),
+        cam_source=cam_status.get("source") or "",
+        proc_obj=proc,
+    )
+    return jsonify(ok=all(v.get("ok") for v in checks.values()), checks=checks)
 
 
 @app.route("/admin/cameras/<string:cam_id>/polygon", methods=["GET"])
 @login_required
 def admin_camera_polygon_get(cam_id: str):
+    if cam_id not in CAMERA_CONFIGS:
+        return jsonify(ok=False, error="Unknown camera"), 404
     poly_path = PROJECT_ROOT / (
         "crosswalk_polygon.json"
         if cam_id in ("cam2", "default")
@@ -1118,6 +1469,8 @@ def admin_camera_polygon_get(cam_id: str):
 @app.route("/admin/cameras/<string:cam_id>/polygon", methods=["POST"])
 @login_required
 def admin_camera_polygon_save(cam_id: str):
+    if cam_id not in CAMERA_CONFIGS:
+        return jsonify(ok=False, error="Unknown camera"), 404
     data   = request.get_json(silent=True) or {}
     points = data.get("points", [])
     poly_path = PROJECT_ROOT / (
@@ -1150,6 +1503,8 @@ def admin_camera_polygon_save(cam_id: str):
 @app.route("/admin/cameras/<string:cam_id>/recent")
 @login_required
 def admin_camera_recent(cam_id: str):
+    if cam_id not in CAMERA_CONFIGS:
+        return jsonify(ok=False, error="Unknown camera"), 404
     with db_connection() as conn:
         rows = conn.execute(
             """SELECT id, timestamp, plate_number, vehicle_id,
@@ -1165,4 +1520,4 @@ def admin_camera_recent(cam_id: str):
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0", port=5000, threaded=True)
+    app.run(debug=True, host="0.0.0.0", port=5000, threaded=True, use_reloader=False)

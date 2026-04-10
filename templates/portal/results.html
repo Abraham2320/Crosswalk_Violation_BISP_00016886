@@ -11,19 +11,19 @@
   {%- if ts -%}
     {%- set parts = ts[:19].replace('T',' ').split(' ') -%}
     {%- set d = parts[0].split('-') -%}
-    {%- set t = parts[1] if parts|length > 1 else '' -%}
-    {%- set days = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'] -%}
-    {{ d[2] }} {{ ['January','February','March','April','May','June','July','August','September','October','November','December'][(d[1]|int) - 1] }} {{ d[0] }} at {{ t }}
+    {%- set time = parts[1] if parts|length > 1 else '' -%}
+    {%- set month_keys = ['january','february','march','april','may','june','july','august','september','october','november','december'] -%}
+    {{ d[2] }} {{ t('portal.' + month_keys[(d[1]|int) - 1]) }} {{ d[0] }} {{ t('portal.at') }} {{ time }}
   {%- else -%}—{%- endif -%}
 {% endmacro %}
 
 {% macro type_explanation(vtype) %}
   {%- if vtype == 'FAILED_TO_YIELD' -%}
-    Vehicle entered crosswalk while pedestrian was crossing
+    {{ t('portal.fty_explanation') }}
   {%- elif vtype == 'UNSAFE_REENTRY' -%}
-    Vehicle entered crosswalk with insufficient gap after pedestrian cleared
+    {{ t('portal.usr_explanation') }}
   {%- else -%}
-    Crosswalk violation recorded
+    {{ t('portal.violation_explanation') }}
   {%- endif -%}
 {% endmacro %}
 
@@ -33,20 +33,42 @@
   <!-- Minimal header -->
   <header class="portal-header">
     <a href="{{ url_for('portal') }}" class="portal-brand">
-      <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
-        <rect x="1" y="5" width="11" height="8" rx="1.5" stroke="currentColor" stroke-width="1.5"/>
-        <path d="M12 8.5L17 6v7l-5-2.5" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
-        <circle cx="5.5" cy="9" r="1.5" fill="currentColor"/>
-      </svg>
-      WIUT Traffic Enforcement
+      <img src="{{ url_for('static', filename='img/wiut-logo.svg') }}" alt="WIUT logo" style="width:16px;height:16px;display:block;flex-shrink:0;">
+      {{ t('portal.brand') }}
     </a>
   </header>
+
+  <!-- Language switcher for portal -->
+  <div style="position:fixed; top:14px; right:20px; z-index:800;">
+    <div class="lang-switcher" style="position:relative;">
+      <button class="lang-btn" onclick="this.nextElementSibling.classList.toggle('open')" title="{{ t('lang.choose') }}">
+        <svg width="13" height="13" viewBox="0 0 20 20" fill="none">
+          <circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="1.5"/>
+          <path d="M10 2C10 2 7 6 7 10s3 8 3 8" stroke="currentColor" stroke-width="1.2"/>
+          <path d="M10 2c0 0 3 4 3 8s-3 8-3 8" stroke="currentColor" stroke-width="1.2"/>
+          <path d="M2 10h16" stroke="currentColor" stroke-width="1.2"/>
+        </svg>
+        <span>{{ SUPPORTED_LANGS[lang] }}</span>
+        <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+          <path d="M2 3.5l3 3 3-3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+        </svg>
+      </button>
+      <div class="lang-dropdown">
+        {% for code, label in SUPPORTED_LANGS.items() %}
+        <a href="{{ url_for('set_language', lang=code, next=request.url) }}"
+           class="lang-option {% if code == lang %}active{% endif %}">
+          {{ label }}
+        </a>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
 
   {% if violations %}
 
   <!-- Violation banner -->
   <div class="results-banner">
-    <span class="results-banner-label">&#9888; Violation Record</span>
+    <span class="results-banner-label">&#9888; {{ t('portal.violation_record') }}</span>
     <span class="results-plate">{{ plate_number }}</span>
   </div>
 
@@ -54,11 +76,11 @@
 
     <!-- Summary bar -->
     <div class="summary-bar">
-      <span>Total violations: <strong>{{ violations|length }}</strong></span>
-      <span>Most recent:
+      <span>{{ t('portal.total_violations') }}: <strong>{{ violations|length }}</strong></span>
+      <span>{{ t('portal.most_recent') }}:
         <strong>{{ violations[0].timestamp[:10] if violations[0].timestamp else '—' }}</strong>
       </span>
-      <span>Status: <strong style="color:var(--accent-red);">RECORDED</strong></span>
+      <span>{{ t('portal.status') }}: <strong style="color:var(--accent-red);">{{ t('portal.status_recorded') }}</strong></span>
     </div>
 
     <!-- Violation cards -->
@@ -68,7 +90,7 @@
 
         <!-- Card header -->
         <div class="violation-card-header">
-          <span class="violation-card-number">Violation #{{ loop.index }}</span>
+          <span class="violation-card-number">{{ t('portal.violation_num') }}{{ loop.index }}</span>
           <div class="violation-card-badges">
             {% if v.severity == 'HIGH' %}
               <span class="badge badge-high">HIGH</span>
@@ -87,7 +109,7 @@
           <!-- Snapshot (left) -->
           {% if v.snapshot_path %}
           <div class="violation-snapshot">
-            <span class="violation-snapshot-label">Moment of Violation</span>
+            <span class="violation-snapshot-label">{{ t('portal.moment_label') }}</span>
             <img
               src="{{ url_for('static', filename=v.snapshot_path) }}"
               alt="Violation snapshot"
@@ -100,29 +122,29 @@
           <div class="violation-details" {% if not v.snapshot_path %}style="grid-column:1/-1;"{% endif %}>
 
             <div class="detail-field">
-              <div class="detail-field-label">Time of Violation</div>
+              <div class="detail-field-label">{{ t('portal.time_of_violation') }}</div>
               <div class="detail-field-time">{{ fmt_ts(v.timestamp) }}</div>
             </div>
 
             <div class="detail-field">
-              <div class="detail-field-label">Location</div>
+              <div class="detail-field-label">{{ t('portal.location') }}</div>
               <div class="detail-field-location">
-                {{ v.display_location or 'Location not recorded' }}
+                {{ v.display_location or t('portal.location_not_recorded') }}
               </div>
             </div>
 
             <div class="detail-field">
-              <div class="detail-field-label">Violation Type</div>
+              <div class="detail-field-label">{{ t('portal.violation_type') }}</div>
               <div class="detail-field-type">{{ type_explanation(v.violation_type) }}</div>
             </div>
 
             <div class="detail-field">
-              <div class="detail-field-label">Plate Detected</div>
+              <div class="detail-field-label">{{ t('portal.plate_detected') }}</div>
               <div class="detail-field-plate">
                 {% if v.plate_number %}
                   {{ v.plate_number }}
                 {% else %}
-                  <span style="color:var(--text-muted); font-size:13px;">Not captured</span>
+                  <span style="color:var(--text-muted); font-size:13px;">{{ t('portal.not_captured') }}</span>
                 {% endif %}
               </div>
             </div>
@@ -133,8 +155,7 @@
         <!-- Card footer -->
         <div class="violation-card-footer">
           <div class="card-disclaimer">
-            This record is maintained by the WIUT Traffic Enforcement System.
-            For disputes, contact your local traffic authority.
+            {{ t('portal.disclaimer') }}
           </div>
         </div>
 
@@ -144,7 +165,7 @@
 
     <!-- Search again -->
     <div style="text-align:center; margin-top:32px;">
-      <a href="{{ url_for('portal') }}" class="btn-ghost">Search Again</a>
+      <a href="{{ url_for('portal') }}" class="btn-ghost">{{ t('portal.search_again') }}</a>
     </div>
 
   </div>
@@ -161,19 +182,18 @@
                 stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
       </div>
-      <div class="empty-title">No Violations Found</div>
+      <div class="empty-title">{{ t('portal.no_violations_title') }}</div>
       <div class="empty-subtitle">
-        The plate <span class="font-mono text-amber">{{ plate_number }}</span>
-        has no recorded violations in this system.
+        {{ t('portal.no_violations_desc') }} <span class="font-mono text-amber">{{ plate_number }}</span>.
       </div>
-      <a href="{{ url_for('portal') }}" class="btn-ghost">Search Again</a>
+      <a href="{{ url_for('portal') }}" class="btn-ghost">{{ t('portal.search_again') }}</a>
     </div>
   </div>
 
   {% endif %}
 
   <footer class="site-footer" style="border-top:1px solid var(--border);">
-    WIUT Traffic Enforcement System &middot; {{ current_year }}
+    {{ t('footer.text') }} &middot; {{ current_year }}
   </footer>
 
 </div>

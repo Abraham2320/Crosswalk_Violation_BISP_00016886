@@ -11,9 +11,9 @@
   {% if vehicle_detail %}
   <!-- ── Single vehicle detail ─────────────────────────────── -->
   <div class="page-header" style="display:flex; align-items:center; gap:16px;">
-    <a href="{{ url_for('admin_vehicles') }}" class="btn-ghost btn-sm">&larr; All Vehicles</a>
+    <a href="{{ url_for('admin_vehicles') }}" class="btn-ghost btn-sm">{{ t('vehicles.back') }}</a>
     <div>
-      <div class="page-title">Vehicle History</div>
+      <div class="page-title">{{ t('vehicles.history_title') }}</div>
       <div class="page-subtitle font-mono">{{ identifier }}</div>
     </div>
   </div>
@@ -23,13 +23,13 @@
       <table class="data-table">
         <thead>
           <tr>
-            <th>Timestamp</th>
-            <th>Plate</th>
-            <th>Type</th>
-            <th>Severity</th>
-            <th>Location</th>
-            <th>Confidence</th>
-            <th>Action</th>
+              <th>{{ t('vehicles.col_timestamp') }}</th>
+            <th>{{ t('vehicles.col_plate') }}</th>
+            <th>{{ t('violations.col_type') }}</th>
+            <th>{{ t('violations.col_severity') }}</th>
+            <th>{{ t('violations.col_location') }}</th>
+            <th>{{ t('violations.col_confidence') }}</th>
+            <th>{{ t('violations.col_action') }}</th>
           </tr>
         </thead>
         <tbody>
@@ -41,9 +41,9 @@
             <td class="amber">{{ v.plate_number or '—' }}</td>
             <td style="font-size:13px;">
               {% if v.violation_type == 'FAILED_TO_YIELD' %}
-                <span style="color:var(--accent-red);">Failed to Yield</span>
+                <span style="color:var(--accent-red);">{{ t('common.failed_to_yield') }}</span>
               {% else %}
-                <span style="color:var(--accent-amber);">Unsafe Re-entry</span>
+                <span style="color:var(--accent-amber);">{{ t('common.unsafe_reentry') }}</span>
               {% endif %}
             </td>
             <td>
@@ -62,14 +62,14 @@
             </td>
             <td>
               <a href="{{ url_for('admin_violation_detail', violation_id=v.id) }}"
-                 class="btn-ghost btn-sm">View</a>
+                 class="btn-ghost btn-sm">{{ t('vehicles.view') }}</a>
             </td>
           </tr>
           {% else %}
           <tr>
             <td colspan="7" style="text-align:center; color:var(--text-muted); padding:32px;">
-              No violations found.
-            </td>
+                {{ t('vehicles.no_violations') }}
+              </td>
           </tr>
           {% endfor %}
         </tbody>
@@ -80,8 +80,8 @@
   {% else %}
   <!-- ── All vehicles list ──────────────────────────────────── -->
   <div class="page-header">
-    <div class="page-title">Vehicles</div>
-    <div class="page-subtitle">All unique vehicles sorted by total violations</div>
+    <div class="page-title">{{ t('vehicles.title') }}</div>
+    <div class="page-subtitle">{{ t('vehicles.subtitle') }}</div>
   </div>
 
   <div class="card" style="padding:0; overflow:hidden;">
@@ -89,14 +89,14 @@
       <table class="data-table">
         <thead>
           <tr>
-            <th>Plate</th>
-            <th>Vehicle ID</th>
-            <th>Total</th>
-            <th>First Seen</th>
-            <th>Last Seen</th>
-            <th>High</th>
-            <th>Low</th>
-            <th>Action</th>
+            <th>{{ t('vehicles.col_plate') }}</th>
+            <th>{{ t('vehicles.col_vehicle_id') }}</th>
+            <th>{{ t('vehicles.col_total') }}</th>
+            <th>{{ t('vehicles.col_first_seen') }}</th>
+            <th>{{ t('vehicles.col_last_seen') }}</th>
+            <th>{{ t('vehicles.col_high') }}</th>
+            <th>{{ t('vehicles.col_low') }}</th>
+            <th>{{ t('vehicles.col_action') }}</th>
           </tr>
         </thead>
         <tbody>
@@ -120,14 +120,14 @@
             <td>
               <a href="{{ url_for('admin_vehicle_detail',
                          identifier=v.plate_number if v.plate_number else v.vehicle_id|string) }}"
-                 class="btn-ghost btn-sm">Detail</a>
+                 class="btn-ghost btn-sm">{{ t('vehicles.detail') }}</a>
             </td>
           </tr>
           {% else %}
           <tr>
             <td colspan="8" style="text-align:center; color:var(--text-muted); padding:48px;">
-              No vehicle data yet.
-            </td>
+                {{ t('vehicles.no_data') }}
+              </td>
           </tr>
           {% endfor %}
         </tbody>

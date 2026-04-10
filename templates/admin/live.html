@@ -334,13 +334,13 @@
   <div class="page-header" style="display:flex; align-items:center; justify-content:space-between; margin-bottom:18px;">
     <div>
       <div class="page-title" style="font-size:22px;">
-        <span style="color:var(--accent-amber);">&#9679;</span>&nbsp;Live Command Center
+        <span style="color:var(--accent-amber);">&#9679;</span>&nbsp;{{ t('live.title') }}
       </div>
-      <div class="page-subtitle">Real-time crosswalk monitoring &amp; violation detection</div>
+      <div class="page-subtitle">{{ t('live.subtitle') }}</div>
     </div>
     <div class="live-indicator" id="sys-indicator">
       <div class="live-dot"></div>
-      <span id="sys-label">System Active</span>
+      <span id="sys-label">{{ t('live.system_active') }}</span>
     </div>
   </div>
 
@@ -353,17 +353,17 @@
       <div class="quick-stats">
         <div class="qs-item">
           <div class="qs-value" id="ls-total">—</div>
-          <div class="qs-label">Total Violations</div>
+          <div class="qs-label">{{ t('dashboard.total_violations') }}</div>
         </div>
         <div class="qs-item">
           <div class="qs-value" id="ls-today">—</div>
-          <div class="qs-label">Today</div>
+          <div class="qs-label">{{ t('dashboard.today') }}</div>
         </div>
         <div class="qs-item">
           <div class="qs-value" id="ls-fps">
             {{ camera_status.fps if camera_status.connected else '—' }}
           </div>
-          <div class="qs-label">Live FPS</div>
+          <div class="qs-label">{{ t('live.live_fps') }}</div>
         </div>
       </div>
 
@@ -398,46 +398,46 @@
           <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style="flex-shrink:0">
             <polygon points="2,1 9,5 2,9" fill="currentColor"/>
           </svg>
-          Start Detection
+          {{ t('live.start') }}
         </button>
         <button id="btn-det-stop" class="btn-danger btn-sm"
                 onclick="stopDetection()" style="display:none;">
           <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style="flex-shrink:0">
             <rect x="1" y="1" width="8" height="8" fill="currentColor"/>
           </svg>
-          Stop Detection
+          {{ t('live.stop') }}
         </button>
         <button id="btn-poly-edit" class="btn-ghost btn-sm"
                 onclick="enterEditMode()">
-          ◈ Draw Polygon
+          ◈ {{ t('live.draw_polygon') }}
         </button>
         <button id="btn-poly-save" class="btn-ghost btn-sm"
                 onclick="savePolygon()"
                 style="display:none; border-color:rgba(0,212,140,0.4); color:var(--accent-green);">
-          ✓ Save Zone
+          ✓ {{ t('live.save_zone') }}
         </button>
         <button id="btn-poly-undo" class="btn-ghost btn-sm"
                 onclick="undoPoint()" style="display:none;">
-          ↩ Undo
+          ↩ {{ t('live.undo') }}
         </button>
         <button id="btn-poly-cancel" class="btn-ghost btn-sm"
                 onclick="exitEditMode()" style="display:none;">
-          ✕ Cancel
+          ✕ {{ t('common.cancel') }}
         </button>
         <button id="btn-poly-freeze" class="btn-ghost btn-sm"
                 onclick="freezeFrame()"
                 style="display:none; border-color:rgba(59,130,246,0.4); color:var(--accent-blue);">
-          ⊙ Re-freeze
+          ⊙ {{ t('live.refreeze') }}
         </button>
         <button id="btn-poly-clear" class="btn-ghost btn-sm"
                 onclick="clearPolygon()"
                 style="border-color:rgba(240,64,64,0.35); color:var(--accent-red);">
-          ⊘ Clear Zone
+          ⊘ {{ t('live.clear_zone') }}
         </button>
         <button id="btn-demo-video" class="btn-ghost btn-sm"
                 onclick="loadTestVideo()"
                 style="border-color:rgba(0,212,140,0.35); color:var(--accent-green);">
-          ▶ Test Video
+          ▶ {{ t('live.test_video') }}
         </button>
       </div>
 
@@ -468,7 +468,7 @@
           <span class="overlay-badge detecting" id="det-badge" style="display:none;">
             <span style="width:6px;height:6px;border-radius:50%;background:var(--accent-amber);
                          animation:alertFlash 1.5s infinite;"></span>
-            <span>Detecting</span>
+            <span>{{ t('live.detecting') }}</span>
           </span>
           <span class="overlay-badge" style="color:var(--text-muted); {% if not camera_status.source %}display:none;{% endif %}"
                 id="source-badge">
@@ -478,7 +478,7 @@
 
         <!-- Active violation banner -->
         <div class="violation-alert" id="violation-alert">
-          ⚠ &nbsp;ACTIVE VIOLATION DETECTED
+          ⚠ &nbsp;{{ t('live.active_violation') }}
         </div>
       </div>
 
@@ -490,15 +490,15 @@
       <!-- Edit-mode polygon panel -->
       <div class="poly-panel" id="poly-panel" style="display:none;">
         <div class="poly-hint">
-          <strong>Calibration mode active.</strong> Stream frozen — click crosswalk corners on the still frame.<br>
-          <strong>Undo</strong> removes the last point · <strong>Save Zone</strong> when done · <strong>Cancel</strong> to discard.<br>
+          <strong>{{ t('live.calibration_active') }}</strong> {{ t('live.poly_hint') }}<br>
+          <strong>{{ t('live.undo') }}</strong> · <strong>{{ t('live.save_zone') }}</strong> · <strong>{{ t('common.cancel') }}</strong><br>
           <span style="color:var(--accent-blue);">⊙ Re-freeze</span>
           <span style="color:var(--text-muted);"> grabs a fresh snapshot if the scene has moved.</span>
         </div>
         <div style="font-family:var(--font-mono); font-size:11px; color:var(--text-muted); margin-bottom:4px;"
-             id="poly-freeze-status">Freezing frame…</div>
+             id="poly-freeze-status">{{ t('live.freezing') }}</div>
         <div style="font-family:var(--font-mono); font-size:11px; color:var(--text-muted);"
-             id="poly-point-count">Points: 0</div>
+             id="poly-point-count">{{ t('live.points') }}: 0</div>
       </div>
 
       <!-- Detection live stats (shown when detection active) -->
@@ -506,46 +506,46 @@
         <div class="det-stats-grid">
           <div class="mini-stat active">
             <div class="mini-stat-value" id="ds-ped">0</div>
-            <div class="mini-stat-label">Pedestrians</div>
+            <div class="mini-stat-label">{{ t('live.pedestrians') }}</div>
           </div>
           <div class="mini-stat active">
             <div class="mini-stat-value" id="ds-veh">0</div>
-            <div class="mini-stat-label">Vehicles</div>
+            <div class="mini-stat-label">{{ t('live.vehicles_label') }}</div>
           </div>
           <div class="mini-stat active">
             <div class="mini-stat-value ok" id="ds-ped-zone">0</div>
-            <div class="mini-stat-label">P in Zone</div>
+            <div class="mini-stat-label">{{ t('live.p_in_zone') }}</div>
           </div>
           <div class="mini-stat active">
             <div class="mini-stat-value ok" id="ds-veh-zone">0</div>
-            <div class="mini-stat-label">V in Zone</div>
+            <div class="mini-stat-label">{{ t('live.v_in_zone') }}</div>
           </div>
           <div class="mini-stat active">
             <div class="mini-stat-value fail" id="ds-violations">0</div>
-            <div class="mini-stat-label">Session Hits</div>
+            <div class="mini-stat-label">{{ t('live.session_hits') }}</div>
           </div>
         </div>
       </div>
 
       <!-- Camera source card -->
       <div class="card camera-control" style="margin-top:14px;">
-        <div class="card-title">Camera Source</div>
+        <div class="card-title">{{ t('live.camera_source') }}</div>
         <div class="source-row">
           <input class="input" type="text" id="cam-source"
                  value="{{ default_source }}"
                  data-demo-source="{{ demo_source }}"
                  placeholder="0  or  rtsp://…  or  http://192.168.1.x:8080/video">
           <button class="btn-primary btn-sm" id="btn-connect"
-                  onclick="connectCamera()">Connect</button>
+                  onclick="connectCamera()">{{ t('live.connect') }}</button>
           <button class="btn-ghost btn-sm" id="btn-disconnect"
                   onclick="disconnectCamera()"
                   {% if not camera_status.connected %}style="display:none;"{% endif %}>
-            Disconnect
+            {{ t('live.disconnect') }}
           </button>
         </div>
         <div class="source-presets">
           <span style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted);align-self:center;">
-            Quick:
+            {{ t('live.quick') }}
           </span>
           <button class="preset-btn" onclick="setSource('0')">Webcam 0</button>
           <button class="preset-btn" onclick="setSource('1')">Webcam 1</button>
@@ -571,7 +571,7 @@
           <summary style="font-family:var(--font-display);font-size:11px;color:var(--text-muted);
                           cursor:pointer;letter-spacing:0.08em;text-transform:uppercase;
                           user-select:none;">
-            Camera Connection Guide
+            {{ t('live.camera_guide') }}
           </summary>
           <div style="margin-top:14px;font-family:var(--font-mono);font-size:11px;
                       color:var(--text-muted);line-height:2.2;
@@ -600,17 +600,17 @@
     <div>
       <div class="card" style="padding:20px;">
         <div class="panel-header">
-          <div class="card-title">Violation Log</div>
-          <span class="panel-refresh-tag">Auto 3s</span>
+          <div class="card-title">{{ t('live.violation_log') }}</div>
+          <span class="panel-refresh-tag">{{ t('live.auto_refresh') }}</span>
         </div>
         <div class="log-wrap" id="violation-log">
           <div style="text-align:center;padding:36px;color:var(--text-muted);
-                      font-size:12px;font-family:var(--font-mono);">Loading…</div>
+                      font-size:12px;font-family:var(--font-mono);">{{ t('live.loading') }}</div>
         </div>
         <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border-subtle);">
           <a href="{{ url_for('admin_violations') }}"
              class="btn-ghost btn-sm" style="width:100%;justify-content:center;">
-            View Full Log
+            {{ t('live.view_full_log') }}
           </a>
         </div>
       </div>
@@ -629,6 +629,7 @@
 ═══════════════════════════════════════════════════════════════ */
 let editMode      = false;
 let polygonPoints = [];   // frame-coordinate points [[x,y], ...]
+let polygonOnServer = false;
 let frameW = parseInt(document.getElementById("live-img").dataset.frameWidth)  || 1280;
 let frameH = parseInt(document.getElementById("live-img").dataset.frameHeight) || 720;
 let detectionActive = false;
@@ -638,6 +639,40 @@ let _frozenFrame = null;   // HTMLImageElement while calibration mode active
 
 const canvas = document.getElementById("zone-canvas");
 const ctx    = canvas.getContext("2d");
+const I18N = {
+  points: {{ t('live.points')|tojson }},
+  pointReady: {{ t('live.point_ready')|tojson }},
+  pointNeed: {{ t('live.point_need')|tojson }},
+  connectDemo: {{ t('live.connect_demo')|tojson }},
+  freezing: {{ t('live.freezing')|tojson }},
+  frameFrozen: {{ t('live.frame_frozen')|tojson }},
+  frameFreezeFailed: {{ t('live.frame_freeze_failed')|tojson }},
+  startDetection: {{ t('live.start_violation_detection')|tojson }},
+  drawSaveFirst: {{ t('live.draw_save_zone_first')|tojson }},
+  addPoints: {{ t('live.add_points')|tojson }},
+  saveFailed: {{ t('live.save_failed')|tojson }},
+  clearConfirm: {{ t('live.clear_confirm')|tojson }},
+  clearFailed: {{ t('live.clear_failed')|tojson }},
+  zoneSaved: {{ t('live.zone_saved')|tojson }},
+  zoneCleared: {{ t('live.zone_cleared')|tojson }},
+  noZoneFirst: {{ t('live.no_zone_first')|tojson }},
+  connecting: {{ t('live.connecting')|tojson }},
+  starting: {{ t('live.starting')|tojson }},
+  connectCameraFailed: {{ t('live.connect_camera_failed')|tojson }},
+  checkSource: {{ t('live.check_source')|tojson }},
+  warmupModel: {{ t('live.warmup_model')|tojson }},
+  noPolygonAccuracy: {{ t('live.no_polygon_accuracy')|tojson }},
+  startupIssue: {{ t('live.startup_issue')|tojson }},
+  detectionFailed: {{ t('live.detection_failed')|tojson }},
+  yoloAvailable: {{ t('live.yolo_available')|tojson }},
+  requestTimeout: {{ t('live.request_timeout')|tojson }},
+  connectionFailed: {{ t('live.connection_failed')|tojson }},
+  demoConnected: {{ t('live.demo_connected')|tojson }},
+  noViolationsYet: {{ t('live.no_violations_yet')|tojson }},
+  undetected: {{ t('live.undetected')|tojson }},
+  viewShort: {{ t('live.view_short')|tojson }},
+  connectBtn: {{ t('live.connect')|tojson }}
+};
 
 /* ═══════════════════════════════════════════════════════════════
    CANVAS SIZING
@@ -716,7 +751,7 @@ function redrawCanvas() {
   if (editMode) {
     const count = polygonPoints.length;
     document.getElementById("poly-point-count").textContent =
-      `Points: ${count}` + (count >= 4 ? " ✓ ready to save" : " (need ≥4)");
+      `${I18N.points}: ${count}` + (count >= 4 ? ` ✓ ${I18N.pointReady}` : ` (${I18N.pointNeed} ≥4)`);
   }
 }
 
@@ -746,7 +781,7 @@ async function enterEditMode() {
     const s = await fetch("{{ url_for('admin_live_status') }}").then(r => r.json());
     if (!s.connected) {
       const statusEl = document.getElementById("poly-freeze-status");
-      if (statusEl) statusEl.textContent = "Connecting demo video for calibration…";
+      if (statusEl) statusEl.textContent = I18N.connectDemo;
 
       const demoSrc = (document.getElementById("cam-source").dataset.demoSource || "Videos/v2.mp4").trim();
       const fd = new FormData();
@@ -793,7 +828,7 @@ async function enterEditMode() {
 async function freezeFrame() {
   const statusEl = document.getElementById("poly-freeze-status");
   try {
-    if (statusEl) statusEl.textContent = "Freezing frame…";
+    if (statusEl) statusEl.textContent = I18N.freezing;
     const r = await fetch("{{ url_for('admin_live_snapshot') }}");
     if (!r.ok) throw new Error("HTTP " + r.status);
     const blob = await r.blob();
@@ -809,14 +844,14 @@ async function freezeFrame() {
         _frozenFrame = img;
         // Don't hide live-img — canvas drawImage covers it; hiding it risks black screen
         redrawCanvas();
-        if (statusEl) statusEl.textContent = "Frame frozen — click to place points.";
+        if (statusEl) statusEl.textContent = I18N.frameFrozen;
         resolve();
       };
       img.onerror = reject;
       img.src = url;
     });
   } catch(e) {
-    if (statusEl) statusEl.textContent = "Could not freeze frame — drawing on live stream.";
+    if (statusEl) statusEl.textContent = I18N.frameFreezeFailed;
   }
 }
 
@@ -848,9 +883,16 @@ function undoPoint() {
   redrawCanvas();
 }
 
+function setDetStartEnabled(enabled) {
+  const btn = document.getElementById("btn-det-start");
+  if (!btn) return;
+  btn.disabled = !enabled;
+  btn.title = enabled ? I18N.startDetection : I18N.drawSaveFirst;
+}
+
 async function savePolygon() {
   if (polygonPoints.length < 4) {
-    alert("Add at least 4 points to define the crosswalk zone.");
+    alert(I18N.addPoints);
     return;
   }
   const btn = document.getElementById("btn-poly-save");
@@ -864,10 +906,12 @@ async function savePolygon() {
     });
     const d = await r.json();
     if (d.ok) {
-      showToast(`Zone saved — ${d.count} points.`);
+      polygonOnServer = true;
+      setDetStartEnabled(true);
+      showToast(`${I18N.zoneSaved} — ${d.count} ${I18N.points}.`);
       exitEditMode();
     } else {
-      alert("Save failed: " + (d.error || "unknown error"));
+      alert(`${I18N.saveFailed}: ` + (d.error || "unknown error"));
     }
   } finally {
     btn.textContent = "✓ Save Zone";
@@ -876,7 +920,7 @@ async function savePolygon() {
 }
 
 async function clearPolygon() {
-  if (!confirm("Clear the saved crosswalk zone? Detection will lose its reference polygon.")) return;
+  if (!confirm(I18N.clearConfirm)) return;
   const r = await fetch("{{ url_for('admin_live_polygon_save') }}", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -884,12 +928,18 @@ async function clearPolygon() {
   });
   if (!r.ok) {
     const d = await r.json().catch(() => ({}));
-    alert("Clear failed: " + (d.error || "unknown error"));
+    alert(`${I18N.clearFailed}: ` + (d.error || "unknown error"));
     return;
   }
+  if (detectionActive) {
+    await fetch("{{ url_for('admin_live_detection_stop') }}", { method: "POST" }).catch(() => {});
+    setDetectionUI(false);
+  }
   polygonPoints = [];
+  polygonOnServer = false;
+  setDetStartEnabled(false);
   redrawCanvas();
-  showToast("Zone cleared.");
+  showToast(I18N.zoneCleared);
 }
 
 async function loadPolygon() {
@@ -899,8 +949,12 @@ async function loadPolygon() {
     const d = await r.json();
     if (d.points && d.points.length >= 4) {
       polygonPoints = d.points;
+      polygonOnServer = true;
+      setDetStartEnabled(true);
     } else {
       polygonPoints = [];
+      polygonOnServer = false;
+      setDetStartEnabled(false);
     }
     redrawCanvas();
   } catch (e) {}
@@ -910,14 +964,19 @@ async function loadPolygon() {
    DETECTION START / STOP
 ═══════════════════════════════════════════════════════════════ */
 async function startDetection() {
+  if (!polygonOnServer) {
+    showToast(I18N.noZoneFirst, 4200);
+    return;
+  }
+
   const btn = document.getElementById("btn-det-start");
-  btn.textContent = "Starting…"; btn.disabled = true;
+  btn.textContent = I18N.starting; btn.disabled = true;
 
   // ── Auto-connect camera if not yet connected ──────────────────
   try {
     const st = await fetch("{{ url_for('admin_live_status') }}").then(r => r.json());
     if (!st.connected) {
-      btn.textContent = "Connecting…";
+      btn.textContent = I18N.connecting;
       // Try the value in the input first, fall back to demo video
       const input   = document.getElementById("cam-source");
       const source  = (input ? input.value.trim() : "") || (input ? input.dataset.demoSource : "") || "Videos/v2.mp4";
@@ -940,11 +999,11 @@ async function startDetection() {
         // Give camera_manager one cycle to buffer a frame
         await new Promise(r => setTimeout(r, 600));
       } else {
-        alert("Could not connect to camera or demo video: " + (cd.error || "Check your source."));
+        alert(`${I18N.connectCameraFailed}: ` + (cd.error || I18N.checkSource));
         btn.textContent = "▶ Start Detection"; btn.disabled = false;
         return;
       }
-      btn.textContent = "Starting…";
+      btn.textContent = I18N.starting;
     }
   } catch (_) { /* status fetch failed — proceed anyway and let server decide */ }
 
@@ -960,22 +1019,22 @@ async function startDetection() {
     if (d.ok) {
       setDetectionUI(true);
       if (d.starting && !d.active) {
-        showToast("Detection is warming up (loading model)…", 4500);
+        showToast(I18N.warmupModel, 4500);
       }
       if (d.active && !editMode) {
         canvas.style.opacity = "0";
       }
       if (!d.polygon_loaded) {
-        showToast("⚠ No polygon defined — draw one first for accurate detection.", 6000);
+        showToast(`⚠ ${I18N.noPolygonAccuracy}`, 6000);
       }
       if (d.last_error) {
-        alert("Detection startup issue: " + d.last_error);
+        alert(`${I18N.startupIssue}: ` + d.last_error);
       }
     } else {
-      alert("Detection failed to start. " + (d.error || d.last_error || "Is the YOLO model available?"));
+      alert(`${I18N.detectionFailed} ` + (d.error || d.last_error || I18N.yoloAvailable));
     }
   } catch (e) {
-    alert("Detection start request timed out or failed. Please try again.");
+    alert(I18N.requestTimeout);
   } finally {
     btn.textContent = "▶ Start Detection"; btn.disabled = false;
   }
@@ -1082,13 +1141,13 @@ function setSourceBadge(source) {
 function connectCamera(sourceOverride = null) {
   const source = (sourceOverride || document.getElementById("cam-source").value).trim();
   const btn    = document.getElementById("btn-connect");
-  btn.textContent = "Connecting…"; btn.disabled = true;
+  btn.textContent = I18N.connecting; btn.disabled = true;
   const fd = new FormData();
   fd.append("source", source);
   fetch("{{ url_for('admin_live_start') }}", { method: "POST", body: fd })
     .then(r => r.json())
     .then(d => {
-      btn.textContent = "Connect"; btn.disabled = false;
+      btn.textContent = I18N.connectBtn; btn.disabled = false;
       const errEl = document.getElementById("cam-error");
       if (d.ok) {
         setCamBadge(true, `LIVE · ${d.width}×${d.height}`);
@@ -1112,11 +1171,11 @@ function connectCamera(sourceOverride = null) {
         }
       } else {
         setCamBadge(false, "OFFLINE");
-        document.getElementById("cam-error-text").textContent = d.error || "Connection failed.";
+        document.getElementById("cam-error-text").textContent = d.error || I18N.connectionFailed;
         errEl.style.display = "";
       }
     })
-    .catch(() => { btn.textContent = "Connect"; btn.disabled = false; });
+    .catch(() => { btn.textContent = I18N.connectBtn; btn.disabled = false; });
 }
 
 function disconnectCamera() {
@@ -1137,13 +1196,13 @@ function loadTestVideo(showToastNotice = true) {
   setSource(demo);
   // Connect only — do NOT auto-start detection; user must press Start Detection manually
   const btn = document.getElementById("btn-connect");
-  btn.textContent = "Connecting…"; btn.disabled = true;
+  btn.textContent = I18N.connecting; btn.disabled = true;
   const fd = new FormData();
   fd.append("source", demo);
   fetch("{{ url_for('admin_live_start') }}", { method: "POST", body: fd })
     .then(r => r.json())
     .then(d => {
-      btn.textContent = "Connect"; btn.disabled = false;
+      btn.textContent = I18N.connectBtn; btn.disabled = false;
       const errEl = document.getElementById("cam-error");
       if (d.ok) {
         setCamBadge(true, `LIVE · ${d.width}×${d.height}`);
@@ -1162,13 +1221,13 @@ function loadTestVideo(showToastNotice = true) {
         syncCanvas();
       } else {
         setCamBadge(false, "OFFLINE");
-        document.getElementById("cam-error-text").textContent = d.error || "Connection failed.";
+        document.getElementById("cam-error-text").textContent = d.error || I18N.connectionFailed;
         errEl.style.display = "";
       }
     })
-    .catch(() => { btn.textContent = "Connect"; btn.disabled = false; });
+    .catch(() => { btn.textContent = I18N.connectBtn; btn.disabled = false; });
   if (showToastNotice) {
-    showToast("Demo video connected. Press Start Detection when ready.", 3500);
+    showToast(I18N.demoConnected, 3500);
   }
 }
 
@@ -1209,7 +1268,7 @@ function renderLog(violations) {
   const wrap = document.getElementById("violation-log");
   if (!violations.length) {
     wrap.innerHTML = `<div style="text-align:center;padding:32px;color:var(--text-muted);
-                      font-size:13px;font-family:var(--font-mono);">No violations yet.</div>`;
+              font-size:13px;font-family:var(--font-mono);">${I18N.noViolationsYet}</div>`;
     return;
   }
   const newest = violations[0];
@@ -1221,7 +1280,7 @@ function renderLog(violations) {
   _lastViolationId = newest.id;
   wrap.innerHTML = violations.map(v => {
     const ts    = (v.timestamp || "").substring(0,19).replace("T"," ");
-    const plate = v.plate_number || "UNDETECTED";
+    const plate = v.plate_number || I18N.undetected;
     const sev   = (v.severity || "").toLowerCase();
     const type  = (v.violation_type || "").replace(/_/g," ");
     return `<div class="log-entry">
@@ -1230,7 +1289,7 @@ function renderLog(violations) {
         <div class="log-plate">${plate}</div>
         <div class="log-meta">${ts} · ${type}</div>
       </div>
-      <a class="log-link" href="/admin/violations/${v.id}">VIEW</a>
+      <a class="log-link" href="/admin/violations/${v.id}">${I18N.viewShort}</a>
     </div>`;
   }).join("");
 }
@@ -1272,6 +1331,7 @@ function showToast(msg, duration = 3000) {
 ═══════════════════════════════════════════════════════════════ */
 document.addEventListener("DOMContentLoaded", () => {
   setSourceBadge("{{ camera_status.source or '' }}");
+  setDetStartEnabled(false);
   loadPolygon();
   pollViolations();
   refreshStats();

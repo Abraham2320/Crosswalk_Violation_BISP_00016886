@@ -9,13 +9,13 @@
 <div class="page-container">
 
   <div class="page-header">
-    <div class="page-title">Analytics</div>
-    <div class="page-subtitle">Patterns & insights across all recorded violations</div>
+    <div class="page-title">{{ t('analytics.title') }}</div>
+    <div class="page-subtitle">{{ t('analytics.subtitle') }}</div>
   </div>
 
   <!-- ── 1. Violations over time (30 days line chart) ──────── -->
   <div class="card" style="margin-bottom:20px;">
-    <div class="card-title">Violations Over Time — Last 30 Days</div>
+    <div class="card-title">{{ t('analytics.violations_over_time') }}</div>
     {% if daily_counts %}
       {% set max_cnt = daily_counts | map(attribute='cnt') | max %}
       {% set pts_count = daily_counts | length %}
@@ -70,14 +70,14 @@
       </div>
     {% else %}
       <p class="text-muted" style="font-size:13px; padding:20px 0;">
-        No data recorded in the last 30 days.
+        {{ t('analytics.no_data_30d') }}
       </p>
     {% endif %}
   </div>
 
   <!-- ── 2. 24-hour heatmap ────────────────────────────────── -->
   <div class="card" style="margin-bottom:20px;">
-    <div class="card-title">24-Hour Heatmap</div>
+    <div class="card-title">{{ t('analytics.heatmap') }}</div>
     {% set max_h = hourly_heatmap.values()|list|max if hourly_heatmap else 1 %}
     <div class="heatmap-grid">
       {% for h in range(24) %}
@@ -100,18 +100,18 @@
 
   <!-- ── 3. Violation type breakdown ──────────────────────── -->
   <div class="card" style="margin-bottom:20px;">
-    <div class="card-title">Violation Type Breakdown</div>
+    <div class="card-title">{{ t('analytics.type_breakdown') }}</div>
     {% set fty = violation_type_split.get('FAILED_TO_YIELD', 0) %}
     {% set usr = violation_type_split.get('UNSAFE_REENTRY', 0) %}
     {% set total_t = fty + usr %}
     <div class="type-split">
       <div class="type-count">
         <div class="type-number" style="color:var(--accent-red);">{{ fty }}</div>
-        <div class="type-name">Failed to Yield</div>
+        <div class="type-name">{{ t('analytics.failed_to_yield') }}</div>
       </div>
       <div class="type-count">
         <div class="type-number" style="color:var(--accent-amber);">{{ usr }}</div>
-        <div class="type-name">Unsafe Re-entry</div>
+        <div class="type-name">{{ t('analytics.unsafe_reentry') }}</div>
       </div>
     </div>
     {% if total_t > 0 %}
@@ -128,7 +128,7 @@
 
   <!-- ── 4. Top locations ──────────────────────────────────── -->
   <div class="card">
-    <div class="card-title">Top Locations</div>
+    <div class="card-title">{{ t('analytics.top_locations') }}</div>
     {% if top_locations and top_locations[0].location %}
       {% set max_loc = top_locations[0].cnt %}
       {% set W = 700 %}{% set H = 30 * (top_locations|length) + 16 %}
@@ -153,9 +153,9 @@
       </div>
     {% else %}
       <div style="padding:20px 0; text-align:center;">
-        <p class="text-muted" style="font-size:13px;">Location Data Pending</p>
+        <p class="text-muted" style="font-size:13px;">{{ t('analytics.location_pending') }}</p>
         <p style="font-family:var(--font-mono); font-size:11px; color:var(--text-muted); margin-top:8px;">
-          Set <code style="color:var(--accent-amber);">LOCATION_NAME</code> env var per camera to populate this chart.
+          {{ t('analytics.location_pending_hint') }}
         </p>
       </div>
     {% endif %}

@@ -10,7 +10,7 @@
 
   <div class="page-header" style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
     <div>
-      <div class="page-title">Violation Log</div>
+      <div class="page-title">{{ t('violations.title') }}</div>
       <div class="page-subtitle">
         {{ total_count }} record{{ 's' if total_count != 1 else '' }} found
         &nbsp;&mdash;&nbsp;
@@ -24,7 +24,7 @@
               stroke="currentColor" stroke-width="1.5"/>
         <circle cx="10" cy="8" r="2" stroke="currentColor" stroke-width="1.5"/>
       </svg>
-      Map View
+      {{ t('violations.map_view') }}
     </button>
   </div>
 
@@ -34,8 +34,8 @@
                 font-family:var(--font-display); font-size:11px; font-weight:700;
                 letter-spacing:0.12em; text-transform:uppercase; color:var(--text-muted);
                 display:flex; align-items:center; justify-content:space-between;">
-      <span>📍 Crosswalk Location — {{ total_count }} violation{{ 's' if total_count != 1 else '' }}</span>
-      <button onclick="toggleViolationMap()" class="btn-ghost btn-sm" style="padding:2px 8px;">Hide</button>
+      <span>📍 {{ t('violations.crosswalk_location') }} — {{ total_count }} violation{{ 's' if total_count != 1 else '' }}</span>
+      <button onclick="toggleViolationMap()" class="btn-ghost btn-sm" style="padding:2px 8px;">{{ t('violations.hide') }}</button>
     </div>
     <div id="violations-map" style="height:340px; width:100%;"></div>
   </div>
@@ -45,52 +45,52 @@
     <div class="filter-bar">
 
       <div class="filter-group">
-        <span class="filter-label">Plate</span>
+        <span class="filter-label">{{ t('violations.filter_plate') }}</span>
         <input class="input" type="text" name="plate"
-               value="{{ filters.plate }}" placeholder="Search plate…"
+               value="{{ filters.plate }}" placeholder="{{ t('violations.search_plate') }}"
                style="min-width:120px;">
       </div>
 
       <div class="filter-group">
-        <span class="filter-label">Severity</span>
+        <span class="filter-label">{{ t('violations.filter_severity') }}</span>
         <select class="input" name="severity">
-          <option value="">All</option>
+          <option value="">{{ t('violations.all') }}</option>
           <option value="HIGH"  {% if filters.severity == 'HIGH'  %}selected{% endif %}>HIGH</option>
           <option value="LOW"   {% if filters.severity == 'LOW'   %}selected{% endif %}>LOW</option>
         </select>
       </div>
 
       <div class="filter-group">
-        <span class="filter-label">Type</span>
+        <span class="filter-label">{{ t('violations.filter_type') }}</span>
         <select class="input" name="violation_type">
-          <option value="">All</option>
-          <option value="FAILED_TO_YIELD"  {% if filters.violation_type == 'FAILED_TO_YIELD'  %}selected{% endif %}>Failed to Yield</option>
-          <option value="UNSAFE_REENTRY"  {% if filters.violation_type == 'UNSAFE_REENTRY'  %}selected{% endif %}>Unsafe Re-entry</option>
+          <option value="">{{ t('violations.all') }}</option>
+          <option value="FAILED_TO_YIELD"  {% if filters.violation_type == 'FAILED_TO_YIELD'  %}selected{% endif %}>{{ t('violations.failed_to_yield') }}</option>
+          <option value="UNSAFE_REENTRY"  {% if filters.violation_type == 'UNSAFE_REENTRY'  %}selected{% endif %}>{{ t('violations.unsafe_reentry') }}</option>
         </select>
       </div>
 
       <div class="filter-group">
-        <span class="filter-label">Date From</span>
+        <span class="filter-label">{{ t('violations.filter_date_from') }}</span>
         <input class="input" type="date" name="date_from"
                value="{{ filters.date_from }}" style="min-width:130px;">
       </div>
 
       <div class="filter-group">
-        <span class="filter-label">Date To</span>
+        <span class="filter-label">{{ t('violations.filter_date_to') }}</span>
         <input class="input" type="date" name="date_to"
                value="{{ filters.date_to }}" style="min-width:130px;">
       </div>
 
       <div style="display:flex; gap:8px; align-items:flex-end;">
-        <button type="submit" class="btn-primary btn-sm">Filter</button>
-        <a href="{{ url_for('admin_violations') }}" class="btn-ghost btn-sm">Clear</a>
+        <button type="submit" class="btn-primary btn-sm">{{ t('violations.filter_btn') }}</button>
+        <a href="{{ url_for('admin_violations') }}" class="btn-ghost btn-sm">{{ t('violations.clear_btn') }}</a>
         <a href="{{ url_for('admin_export_csv',
                    severity=filters.severity,
                    violation_type=filters.violation_type,
                    date_from=filters.date_from,
                    date_to=filters.date_to) }}"
            class="btn-ghost btn-sm">
-          Export CSV
+          {{ t('violations.export_csv') }}
         </a>
       </div>
 
@@ -103,16 +103,16 @@
       <table class="data-table">
         <thead>
           <tr>
-            <th>ID</th>
-            <th>Timestamp</th>
-            <th>Plate</th>
-            <th>Img</th>
-            <th>Vehicle</th>
-            <th>Type</th>
-            <th>Severity</th>
-            <th>Location</th>
-            <th>Confidence</th>
-            <th>Action</th>
+            <th>{{ t('violations.col_id') }}</th>
+            <th>{{ t('violations.col_timestamp') }}</th>
+            <th>{{ t('violations.col_plate') }}</th>
+            <th>{{ t('violations.col_img') }}</th>
+            <th>{{ t('violations.col_vehicle') }}</th>
+            <th>{{ t('violations.col_type') }}</th>
+            <th>{{ t('violations.col_severity') }}</th>
+            <th>{{ t('violations.col_location') }}</th>
+            <th>{{ t('violations.col_confidence') }}</th>
+            <th>{{ t('violations.col_action') }}</th>
           </tr>
         </thead>
         <tbody>
@@ -150,9 +150,9 @@
             </td>
             <td style="font-size:13px;">
               {% if v.violation_type == 'FAILED_TO_YIELD' %}
-                <span style="color:var(--accent-red);">Failed to Yield</span>
+                <span style="color:var(--accent-red);">{{ t('common.failed_to_yield') }}</span>
               {% elif v.violation_type == 'UNSAFE_REENTRY' %}
-                <span style="color:var(--accent-amber);">Unsafe Re-entry</span>
+                <span style="color:var(--accent-amber);">{{ t('common.unsafe_reentry') }}</span>
               {% else %}
                 {{ v.violation_type or '—' }}
               {% endif %}
@@ -180,13 +180,13 @@
             </td>
             <td>
               <a href="{{ url_for('admin_violation_detail', violation_id=v.id) }}"
-                 class="btn-ghost btn-sm">View</a>
+                 class="btn-ghost btn-sm">{{ t('violations.view') }}</a>
             </td>
           </tr>
           {% else %}
           <tr>
             <td colspan="10" style="text-align:center; color:var(--text-muted); padding:48px;">
-              No violations match the selected filters.
+              {{ t('violations.no_records') }}
             </td>
           </tr>
           {% endfor %}

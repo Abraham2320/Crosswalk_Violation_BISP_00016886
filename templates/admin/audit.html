@@ -9,8 +9,8 @@
 <div class="page-container">
 
   <div class="page-header">
-    <div class="page-title">Audit Log</div>
-    <div class="page-subtitle">Last 100 admin actions</div>
+    <div class="page-title">{{ t('audit.title') }}</div>
+    <div class="page-subtitle">{{ t('audit.subtitle') }}</div>
   </div>
 
   <div class="card" style="padding:0; overflow:hidden;">
@@ -43,7 +43,7 @@
           {% else %}
           <tr>
             <td colspan="5" style="text-align:center; color:var(--text-muted); padding:48px;">
-              No audit entries yet.
+              {{ t('audit.no_entries') }}
             </td>
           </tr>
           {% endfor %}

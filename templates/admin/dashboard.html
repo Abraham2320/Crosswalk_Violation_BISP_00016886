@@ -11,16 +11,16 @@
   <!-- Page header -->
   <div class="page-header" style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
     <div>
-      <div class="page-title">Dashboard</div>
-      <div class="page-subtitle">System overview — all time &nbsp;·&nbsp; <span id="live-clock" style="font-family:var(--font-mono); color:var(--accent-amber); font-size:12px;"></span></div>
+      <div class="page-title">{{ t('dashboard.title') }}</div>
+      <div class="page-subtitle">{{ t('dashboard.subtitle') }} &nbsp;&middot;&nbsp; <span id="live-clock" style="font-family:var(--font-mono); color:var(--accent-amber); font-size:12px;"></span></div>
     </div>
     <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
       <button id="btn-summary" class="btn-ghost btn-sm" onclick="generateSummary()">
-        ⚡ AI Summary
+        ⚡ {{ t('dashboard.ai_summary') }}
       </button>
       <div class="live-indicator">
         <div class="live-dot"></div>
-        System Active
+        {{ t('dashboard.system_active') }}
       </div>
     </div>
   </div>
@@ -38,7 +38,7 @@
         </svg>
       </div>
       <div class="stat-value" id="stat-total" data-count="{{ total_violations }}">0</div>
-      <div class="stat-label">Total Violations</div>
+      <div class="stat-label">{{ t('dashboard.total_violations') }}</div>
     </div>
 
     <!-- High severity -->
@@ -52,7 +52,7 @@
         </svg>
       </div>
       <div class="stat-value" data-count="{{ high_severity_count }}">0</div>
-      <div class="stat-label">High Severity</div>
+      <div class="stat-label">{{ t('dashboard.high_severity') }}</div>
     </div>
 
     <!-- Today -->
@@ -65,7 +65,7 @@
         </svg>
       </div>
       <div class="stat-value" id="stat-today" data-count="{{ violations_today }}">0</div>
-      <div class="stat-label">Today</div>
+      <div class="stat-label">{{ t('dashboard.today') }}</div>
     </div>
 
     <!-- Unique vehicles -->
@@ -80,7 +80,7 @@
         </svg>
       </div>
       <div class="stat-value" data-count="{{ unique_vehicles }}">0</div>
-      <div class="stat-label">Unique Vehicles</div>
+      <div class="stat-label">{{ t('dashboard.unique_vehicles') }}</div>
     </div>
 
   </div>
@@ -125,16 +125,16 @@
 
     <!-- Left: Recent violations -->
     <div class="card">
-      <div class="card-title">Recent Violations</div>
+      <div class="card-title">{{ t('dashboard.recent_violations') }}</div>
       <div class="table-scroll">
         <table class="data-table">
           <thead>
             <tr>
-              <th>Time</th>
-              <th>Plate</th>
-              <th>Type</th>
-              <th>Severity</th>
-              <th>Location</th>
+              <th>{{ t('violations.col_timestamp') }}</th>
+              <th>{{ t('violations.col_plate') }}</th>
+              <th>{{ t('violations.col_type') }}</th>
+              <th>{{ t('violations.col_severity') }}</th>
+              <th>{{ t('violations.col_location') }}</th>
             </tr>
           </thead>
           <tbody>
@@ -150,9 +150,9 @@
               </td>
               <td>
                 {% if v.violation_type == 'FAILED_TO_YIELD' %}
-                  <span style="font-size:12px; color:var(--accent-red);">Failed to Yield</span>
+                  <span style="font-size:12px; color:var(--accent-red);">{{ t('common.failed_to_yield') }}</span>
                 {% elif v.violation_type == 'UNSAFE_REENTRY' %}
-                  <span style="font-size:12px; color:var(--accent-amber);">Unsafe Re-entry</span>
+                  <span style="font-size:12px; color:var(--accent-amber);">{{ t('common.unsafe_reentry') }}</span>
                 {% else %}
                   <span style="font-size:12px; color:var(--text-muted);">{{ v.violation_type or '—' }}</span>
                 {% endif %}
@@ -171,7 +171,7 @@
             {% else %}
             <tr>
               <td colspan="5" style="text-align:center; color:var(--text-muted); padding:32px;">
-                No violations recorded yet.
+                {{ t('dashboard.no_violations') }}
               </td>
             </tr>
             {% endfor %}
@@ -215,17 +215,6 @@
     </div>
   </div>
 
-  <!-- Yandex Map — camera location -->
-  <div class="card" style="margin-top:20px;">
-    <div class="card-title" style="margin-bottom:12px;">
-      Camera Location
-      <span style="font-family:var(--font-mono); font-size:11px; color:var(--text-muted); margin-left:8px;">
-        {{ location_name }} · {{ location_latitude }}, {{ location_longitude }}
-      </span>
-    </div>
-    <div id="yandex-map" style="height:320px; border-radius:8px; overflow:hidden; background:var(--bg-secondary);"></div>
-  </div>
-
 </div>
 
 
@@ -233,11 +222,6 @@
 <!-- Pass hourly data to JS -->
 <script>window.HOURLY_DATA = {{ hourly_data | tojson }};</script>
 <script>
-  const _YANDEX_KEY  = "{{ yandex_maps_api_key }}";
-  const _MAP_LAT     = {{ location_latitude }};
-  const _MAP_LNG     = {{ location_longitude }};
-  const _MAP_LABEL   = {{ location_name | tojson }};
-
   // ── Live clock ──────────────────────────────────────────────────────────
   (function tickClock() {
     const el = document.getElementById("live-clock");
@@ -289,44 +273,6 @@
     });
   }
 
-  // ── Yandex Maps ──────────────────────────────────────────────────────────
-  function initYandexMap() {
-    if (typeof ymaps === "undefined" || !_YANDEX_KEY) return;
-    ymaps.ready(function() {
-      try {
-        const map = new ymaps.Map("yandex-map", {
-          center: [_MAP_LAT, _MAP_LNG],
-          zoom: 17,
-          type: "yandex#map",
-          controls: ["zoomControl", "typeSelector"],
-        });
-        const mark = new ymaps.Placemark(
-          [_MAP_LAT, _MAP_LNG],
-          { balloonContent: _MAP_LABEL, hintContent: _MAP_LABEL },
-          { preset: "islands#redCircleDotIcon" }
-        );
-        map.geoObjects.add(mark);
-        // Amber circle overlay for the crosswalk zone
-        const circle = new ymaps.Circle(
-          [[_MAP_LAT, _MAP_LNG], 35],
-          {},
-          { fillColor: "F5A62320", strokeColor: "F5A623", strokeWidth: 2 }
-        );
-        map.geoObjects.add(circle);
-      } catch(e) { console.warn("Yandex map init error:", e); }
-    });
-  }
-
-  if (_YANDEX_KEY) {
-    const s = document.createElement("script");
-    s.src = "https://api-maps.yandex.ru/2.1/?apikey=" + _YANDEX_KEY + "&lang=en_US";
-    s.onload = initYandexMap;
-    document.head.appendChild(s);
-  } else {
-    document.getElementById("yandex-map").innerHTML =
-      "<div style='padding:24px; color:var(--text-muted); font-size:13px; text-align:center;'>" +
-      "Set YANDEX_MAPS_API_KEY in .env to enable the map.</div>";
-  }
 </script>
 {% endblock %}
 

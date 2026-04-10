@@ -16,9 +16,10 @@ from detector.tracker import PedestrianTrack, VehicleTrack
 # ---------------------------------------------------------------------------
 
 SAFE_ENTRY_DELAY_FRAMES: int = 45       # frames after ped exits; car entry within = violation
-ENTRY_EVAL_WINDOW_FRAMES: int = 3       # tolerate brief frame drops around vehicle entry
+ENTRY_EVAL_WINDOW_FRAMES: int = 12      # tolerate frame drops and short tracking jitter
 YIELD_SPEED_THRESHOLD_PX: float = 4.0  # px/frame — below this counts as yielding
 TRACK_RESET_FRAMES: int = 90            # frames outside before ped track is pruned
+YIELD_MIN_SAMPLES: int = 4              # minimum pre-entry speed samples for yield judgement
 
 
 # ---------------------------------------------------------------------------
@@ -121,9 +122,28 @@ def _box_overlaps_polygon(bbox: Tuple[float, float, float, float], polygon: np.n
 
 
 def _ped_in_polygon(ped_track, polygon: np.ndarray) -> bool:
-    """Check pedestrian against polygon using bbox when available, centroid otherwise."""
+    """Check pedestrian against polygon using lower-body and foot anchors first."""
     if ped_track.bbox is not None:
-        return _box_overlaps_polygon(ped_track.bbox, polygon)
+        x1, y1, x2, y2 = map(float, ped_track.bbox)
+        w = max(1.0, x2 - x1)
+        h = max(1.0, y2 - y1)
+
+        # Feet touching the crosswalk should count as in-zone.
+        foot_points = [
+            (x1 + 0.50 * w, y2 - 1),
+            (x1 + 0.20 * w, y2 - 1),
+            (x1 + 0.80 * w, y2 - 1),
+        ]
+        if any(_point_in_polygon(pt, polygon) for pt in foot_points):
+            return True
+
+        # Use lower-body overlap (legs) to avoid missing partial entry.
+        lower_box = (x1, y1 + 0.55 * h, x2, y2)
+        if _box_overlaps_polygon(lower_box, polygon, min_ratio=0.015):
+            return True
+
+        # Fallback: full-body overlap with a very low threshold.
+        return _box_overlaps_polygon((x1, y1, x2, y2), polygon, min_ratio=0.004)
     if ped_track.centroid is not None:
         return _point_in_polygon(ped_track.centroid, polygon)
     return False
@@ -213,8 +233,18 @@ def was_yielding(
     """
     if not car_track.pre_entry_velocity_snapshot:
         return False
-    speeds = [math.hypot(dx, dy) for dx, dy in car_track.pre_entry_velocity_snapshot]
-    return bool(speeds) and min(speeds) < yield_threshold_px
+    speeds = np.array(
+        [math.hypot(dx, dy) for dx, dy in car_track.pre_entry_velocity_snapshot],
+        dtype=float,
+    )
+    if speeds.size < YIELD_MIN_SAMPLES:
+        return False
+
+    # Require sustained low speed, not just one low-noise frame.
+    p70 = float(np.percentile(speeds, 70))
+    tail = speeds[-min(4, speeds.size):]
+    tail_mean = float(tail.mean())
+    return p70 < yield_threshold_px and tail_mean < (yield_threshold_px * 1.1)
 
 
 # ---------------------------------------------------------------------------

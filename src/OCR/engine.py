@@ -43,6 +43,49 @@ class OCREngine:
         )
         return thresholded
 
+    def _enhance_plate_variants(self, image):
+        """
+        Build multiple enhanced plate candidates for OCR:
+        upscaling, denoise, local-contrast boost, sharpening, and binarization.
+        """
+        if image is None or image.size == 0:
+            return []
+
+        h, w = image.shape[:2]
+        scale = 3 if max(h, w) < 120 else 2
+        up = cv2.resize(image, (w * scale, h * scale), interpolation=cv2.INTER_CUBIC)
+
+        gray = cv2.cvtColor(up, cv2.COLOR_BGR2GRAY)
+        den = cv2.bilateralFilter(gray, d=7, sigmaColor=50, sigmaSpace=50)
+        clahe = cv2.createCLAHE(clipLimit=2.8, tileGridSize=(8, 8)).apply(den)
+
+        # Unsharp mask style enhancement for character edges.
+        g_blur = cv2.GaussianBlur(clahe, (0, 0), 1.4)
+        sharp = cv2.addWeighted(clahe, 1.8, g_blur, -0.8, 0)
+
+        _, otsu = cv2.threshold(sharp, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        adaptive = cv2.adaptiveThreshold(
+            sharp,
+            255,
+            cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+            cv2.THRESH_BINARY,
+            31,
+            8,
+        )
+
+        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2))
+        otsu_clean = cv2.morphologyEx(otsu, cv2.MORPH_OPEN, kernel)
+        adaptive_clean = cv2.morphologyEx(adaptive, cv2.MORPH_OPEN, kernel)
+
+        return [
+            self.preprocess(up),
+            sharp,
+            otsu,
+            adaptive,
+            otsu_clean,
+            adaptive_clean,
+        ]
+
     def _extract_text(self, processed) -> tuple[str, float]:
         if self._reader is None:
             return "", 0.0
@@ -77,13 +120,34 @@ class OCREngine:
         if image is None:
             return OCRResult(plate_text=None, confidence=0.0, raw_text="", accepted=False)
 
-        processed = self.preprocess(image)
-        raw_text, confidence = self._extract_text(processed)
-        plate_text = self.clean_text(raw_text)
-        accepted = self.validate(plate_text, confidence)
+        candidates = self._enhance_plate_variants(image)
+        if not candidates:
+            candidates = [self.preprocess(image)]
+
+        best_raw = ""
+        best_clean = ""
+        best_conf = 0.0
+        best_accepted = False
+
+        for processed in candidates:
+            raw_text, confidence = self._extract_text(processed)
+            clean_text = self.clean_text(raw_text)
+            accepted = self.validate(clean_text, confidence)
+
+            # Prefer valid plate matches; otherwise keep highest-confidence fallback.
+            if accepted and (not best_accepted or confidence > best_conf):
+                best_raw = raw_text
+                best_clean = clean_text
+                best_conf = confidence
+                best_accepted = True
+            elif (not best_accepted) and confidence > best_conf:
+                best_raw = raw_text
+                best_clean = clean_text
+                best_conf = confidence
+
         return OCRResult(
-            plate_text=plate_text if accepted else None,
-            confidence=confidence,
-            raw_text=raw_text,
-            accepted=accepted,
+            plate_text=best_clean if best_accepted else None,
+            confidence=best_conf,
+            raw_text=best_raw,
+            accepted=best_accepted,
         )

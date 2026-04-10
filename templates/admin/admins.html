@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block title %}Admin Users - Crosswalk Enforcement{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
+<style>
+.admin-grid {
+  display: grid;
+  grid-template-columns: 420px 1fr;
+  gap: 20px;
+}
+@media (max-width: 1100px) {
+  .admin-grid { grid-template-columns: 1fr; }
+}
+.form-grid {
+  display: grid;
+  gap: 10px;
+}
+.inline-note {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-container">
+  <div class="page-header" style="margin-bottom:20px;">
+    <div>
+      <div class="page-title">{{ t('admins.title') }}</div>
+      <div class="page-subtitle">{{ t('admins.subtitle') }}</div>
+    </div>
+  </div>
+
+  {% if error %}
+  <div class="alert alert-error" style="margin-bottom:12px;">
+    {% if error == 'invalid-username' %}{{ t('admins.err_invalid_username') }}{% endif %}
+    {% if error == 'weak-password' %}{{ t('admins.err_weak_password') }}{% endif %}
+    {% if error == 'username-exists' %}{{ t('admins.err_username_exists') }}{% endif %}
+    {% if error == 'admin-not-found' %}{{ t('admins.err_not_found') }}{% endif %}
+    {% if error == 'cannot-delete-self' %}{{ t('admins.err_cannot_delete_self') }}{% endif %}
+    {% if error == 'last-admin' %}{{ t('admins.err_last_admin') }}{% endif %}
+  </div>
+  {% endif %}
+
+  {% if ok %}
+  <div class="alert alert-success" style="margin-bottom:12px;">
+    {% if ok == 'admin-added' %}{{ t('admins.ok_added') }}{% endif %}
+    {% if ok == 'admin-deleted' %}{{ t('admins.ok_deleted') }}{% endif %}
+  </div>
+  {% endif %}
+
+  <div class="admin-grid">
+    <div class="card" style="padding:18px;">
+      <div class="card-title">{{ t('admins.add_admin') }}</div>
+      <form method="post" action="{{ url_for('admin_admins_add') }}" class="form-grid">
+        <label class="inline-note" for="username">{{ t('admins.username') }}</label>
+        <input id="username" name="username" class="input" type="text" required minlength="3" maxlength="32" placeholder="traffic_supervisor">
+
+        <label class="inline-note" for="password">{{ t('admins.password') }}</label>
+        <input id="password" name="password" class="input" type="password" required minlength="8" placeholder="Minimum 8 characters">
+
+        <button type="submit" class="btn-primary btn-sm" style="margin-top:4px;">{{ t('admins.create_admin') }}</button>
+      </form>
+    </div>
+
+    <div class="card" style="padding:18px;">
+      <div class="card-title">{{ t('admins.current_accounts') }}</div>
+      <div class="table-scroll">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>{{ t('admins.username') }}</th>
+              <th>{{ t('admins.created') }}</th>
+              <th style="width:140px;">{{ t('admins.action') }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for a in admins %}
+            <tr>
+              <td class="mono">{{ a.username }}</td>
+              <td class="mono">{{ a.created_at or '—' }}</td>
+              <td>
+                {% if a.username == session.get('admin') %}
+                  <span class="badge badge-low">{{ t('admins.current_badge') }}</span>
+                {% else %}
+                  <form method="post" action="{{ url_for('admin_admins_delete', admin_id=a.id) }}" onsubmit="return confirm('{{ t('admins.confirm_delete') }} {{ a.username }}?');">
+                    <button type="submit" class="btn-danger btn-sm">{{ t('admins.delete') }}</button>
+                  </form>
+                {% endif %}
+              </td>
+            </tr>
+            {% else %}
+            <tr>
+              <td colspan="3" style="text-align:center; color:var(--text-muted); padding:24px;">{{ t('admins.no_admins') }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

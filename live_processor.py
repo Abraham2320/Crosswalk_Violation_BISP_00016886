@@ -169,6 +169,27 @@ class LiveProcessor:
         self._last_boxes   = None   # (boxes, classes, ids, confs) cache for inter-frame draw
         self._detect_every = 1
 
+        # ── Diagnostics / performance metrics ───────────────────────────────
+        self._live_model_path = ""
+        self._plate_model_mode = "unavailable"
+        self._ocr_backend = "none"
+        self._ocr_gpu_enabled = False
+        self.frames_total = 0
+        self.frames_detected = 0
+        self.frames_skipped = 0
+        self.last_person_count = 0
+        self.last_vehicle_count = 0
+        self.last_frame_ms = 0.0
+        self.avg_frame_ms = 0.0
+        self.last_detect_ms = 0.0
+        self.avg_detect_ms = 0.0
+        self.last_ocr_ms = 0.0
+        self.avg_ocr_ms = 0.0
+        self.ocr_attempts = 0
+        self.ocr_accepted = 0
+        self.ocr_rejected = 0
+        self.violations_submitted = 0
+
     # ── Public API ─────────────────────────────────────────────────────────────
 
     def _start_blocking(self) -> bool:
@@ -257,6 +278,7 @@ class LiveProcessor:
     def get_stats(self) -> dict:
         with self._lock:
             return {
+                "cam_id":             self._cam_id,
                 "active":             self._running,
                 "starting":           self._starting,
                 "ped_total":          self.ped_total,
@@ -266,8 +288,63 @@ class LiveProcessor:
                 "session_violations": self.session_violations,
                 "active_violation":   self.active_violation,
                 "polygon_loaded":     self._polygon is not None,
+                "polygon_points":     int(len(self._polygon)) if self._polygon is not None else 0,
+                "detect_every_n":     self._detect_every,
+                "model_detection":    self._live_model_path,
+                "model_plate":        self._plate_model_mode,
+                "ocr_backend":        self._ocr_backend,
+                "ocr_gpu":            self._ocr_gpu_enabled,
+                "frames_total":       self.frames_total,
+                "frames_detected":    self.frames_detected,
+                "frames_skipped":     self.frames_skipped,
+                "last_person_count":  self.last_person_count,
+                "last_vehicle_count": self.last_vehicle_count,
+                "last_frame_ms":      round(self.last_frame_ms, 2),
+                "avg_frame_ms":       round(self.avg_frame_ms, 2),
+                "last_detect_ms":     round(self.last_detect_ms, 2),
+                "avg_detect_ms":      round(self.avg_detect_ms, 2),
+                "last_ocr_ms":        round(self.last_ocr_ms, 2),
+                "avg_ocr_ms":         round(self.avg_ocr_ms, 2),
+                "ocr_attempts":       self.ocr_attempts,
+                "ocr_accepted":       self.ocr_accepted,
+                "ocr_rejected":       self.ocr_rejected,
+                "ocr_pending":        len(self._plate_ocr_pending),
+                "plate_cached":       len(self._plate_text_cache),
+                "violations_submitted": self.violations_submitted,
                 "last_error":         self.last_error,
             }
+
+    def reset_session_outputs(self) -> None:
+        """Clear per-session counters/caches without unloading models."""
+        with self._lock:
+            self.session_violations = 0
+            self.active_violation = False
+            self._violation_until = 0.0
+            self._active_viol_cars.clear()
+            self._triggered_pairs.clear()
+            self._plate_bbox_cache.clear()
+            self._plate_text_cache.clear()
+            self._plate_ocr_pending.clear()
+            self.frames_total = 0
+            self.frames_detected = 0
+            self.frames_skipped = 0
+            self.last_person_count = 0
+            self.last_vehicle_count = 0
+            self.last_frame_ms = 0.0
+            self.avg_frame_ms = 0.0
+            self.last_detect_ms = 0.0
+            self.avg_detect_ms = 0.0
+            self.last_ocr_ms = 0.0
+            self.avg_ocr_ms = 0.0
+            self.ocr_attempts = 0
+            self.ocr_accepted = 0
+            self.ocr_rejected = 0
+            self.violations_submitted = 0
+
+    def _ema(self, prev: float, current: float, alpha: float = 0.15) -> float:
+        if prev <= 0.0:
+            return current
+        return (1.0 - alpha) * prev + alpha * current
 
     # ── Internals ──────────────────────────────────────────────────────────────
 
@@ -283,6 +360,7 @@ class LiveProcessor:
         # LIVE_MODEL_PATH lets you use a lighter model for the stream
         # (e.g. yolov8n.pt) while the batch pipeline uses the heavier one.
         live_model = os.getenv("LIVE_MODEL_PATH", cfg.models.detection_model_path)
+        self._live_model_path = live_model
 
         print(f"[LiveProcessor] model={live_model}  conf={live_conf}  imgsz={live_imgsz}")
 
@@ -300,19 +378,25 @@ class LiveProcessor:
             from alpr.detector import LicensePlateDetector
             self._plate_detector = LicensePlateDetector(cfg)
             model_type = "custom YOLO" if self._plate_detector._detector is not None else "Haar cascade"
+            self._plate_model_mode = model_type
             print(f"[LiveProcessor:{self._cam_id}] Plate detector ready ({model_type})")
         except Exception as exc:
             print(f"[LiveProcessor:{self._cam_id}] Plate detector unavailable: {exc}")
             self._plate_detector = None
+            self._plate_model_mode = "unavailable"
 
         # ── OCR engine ────────────────────────────────────────────────────────
         try:
             from OCR.engine import OCREngine
             self._ocr_engine = OCREngine(cfg)
+            self._ocr_backend = cfg.models.ocr_backend
+            self._ocr_gpu_enabled = os.getenv("OCR_USE_GPU", "1") != "0"
             print(f"[LiveProcessor:{self._cam_id}] OCR engine ready ({cfg.models.ocr_backend})")
         except Exception as exc:
             print(f"[LiveProcessor:{self._cam_id}] OCR engine unavailable: {exc}")
             self._ocr_engine = None
+            self._ocr_backend = "none"
+            self._ocr_gpu_enabled = False
         self._split_ratio = cfg.runtime.split_ratio
         self._show_split_overlay = cfg.runtime.show_split_overlay
         self._stabilizer = VideoStabilizer() if self._stabilizer_enabled else None
@@ -338,6 +422,21 @@ class LiveProcessor:
         self._detect_every = 1
         self._last_boxes   = None   # last (boxes, classes, ids, confs) for inter-frame drawing
         self._skip_counter = 0
+        self.frames_total = 0
+        self.frames_detected = 0
+        self.frames_skipped = 0
+        self.last_person_count = 0
+        self.last_vehicle_count = 0
+        self.last_frame_ms = 0.0
+        self.avg_frame_ms = 0.0
+        self.last_detect_ms = 0.0
+        self.avg_detect_ms = 0.0
+        self.last_ocr_ms = 0.0
+        self.avg_ocr_ms = 0.0
+        self.ocr_attempts = 0
+        self.ocr_accepted = 0
+        self.ocr_rejected = 0
+        self.violations_submitted = 0
 
     def _loop(self) -> None:
         if self._cam_id == "default":
@@ -369,12 +468,18 @@ class LiveProcessor:
             PedestrianTrack, VehicleTrack, apply_cross_class_nms,
         )
         from logic.violation import (
-            TRACK_RESET_FRAMES, check_violation, compute_approach_axis,
+            ENTRY_EVAL_WINDOW_FRAMES, TRACK_RESET_FRAMES, check_violation, compute_approach_axis,
             get_polygon_midline, update_pedestrian_state,
         )
         from vision.draw import draw_box
 
         self._frame_index += 1
+        t_frame_start = time.perf_counter()
+        self.frames_total += 1
+        if run_detect:
+            self.frames_detected += 1
+        else:
+            self.frames_skipped += 1
 
         # ── Stabilizer (mirrors main.py frame_index == 1 check) ───────────────
         if self._stabilizer is not None:
@@ -411,7 +516,12 @@ class LiveProcessor:
         # YOLO, which confused the detector → fewer valid track IDs returned →
         # the early-return path fired every frame → annotated_jpeg was never
         # updated → the MJPEG feed froze on dark/placeholder content.
+        t_detect_start = time.perf_counter()
         results = self._detector.detect(frame) if (self._detector and run_detect) else None
+        detect_ms = (time.perf_counter() - t_detect_start) * 1000.0
+        self.last_detect_ms = detect_ms if run_detect else 0.0
+        if run_detect:
+            self.avg_detect_ms = self._ema(self.avg_detect_ms, detect_ms)
 
         # ── Draw polygon zone overlay (AFTER detection, same order as main.py) ─
         if polygon is not None and crosswalk is not None:
@@ -451,6 +561,8 @@ class LiveProcessor:
         classes = results[0].boxes.cls.cpu().numpy().astype(int)
         ids     = results[0].boxes.id.cpu().numpy().astype(int)
         confs   = results[0].boxes.conf.cpu().numpy()
+        self.last_person_count = int((classes == 0).sum())
+        self.last_vehicle_count = int((classes != 0).sum())
 
         boxes, classes, ids, confs = apply_cross_class_nms(
             boxes, classes, ids, confs, iou_threshold=0.5
@@ -552,7 +664,7 @@ class LiveProcessor:
                 if (
                     vt is not None
                     and vt.polygon_entry_frame is not None
-                    and (self._frame_index - vt.polygon_entry_frame) <= 3
+                    and (self._frame_index - vt.polygon_entry_frame) <= ENTRY_EVAL_WINDOW_FRAMES
                 ):
                     for ped_id, pt in self._ped_tracks.items():
                         pair = (obj_id, ped_id)
@@ -693,6 +805,8 @@ class LiveProcessor:
             self.ped_in_zone = ped_in_zone
             self.veh_in_zone = len(newly_in)
             self.active_violation = time.monotonic() < self._violation_until
+            self.last_frame_ms = (time.perf_counter() - t_frame_start) * 1000.0
+            self.avg_frame_ms = self._ema(self.avg_frame_ms, self.last_frame_ms)
 
         return frame
 
@@ -739,19 +853,28 @@ class LiveProcessor:
         import tempfile
         import os as _os
         tmp_path = None
+        t0 = time.perf_counter()
         try:
             tmp = tempfile.NamedTemporaryFile(suffix=".jpg", delete=False)
             cv2.imwrite(tmp.name, plate_crop)
             tmp.close()
             tmp_path = tmp.name
             result = self._ocr_engine.recognize(tmp_path)
+            self.ocr_attempts += 1
             if result.plate_text:
                 self._plate_text_cache[obj_id] = result.plate_text
+                self.ocr_accepted += 1
             elif result.raw_text and len(result.raw_text.strip()) >= 3:
                 self._plate_text_cache[obj_id] = f"~{result.raw_text.strip()[:10]}"
+                self.ocr_rejected += 1
+            else:
+                self.ocr_rejected += 1
         except Exception:
-            pass
+            self.ocr_rejected += 1
         finally:
+            ocr_ms = (time.perf_counter() - t0) * 1000.0
+            self.last_ocr_ms = ocr_ms
+            self.avg_ocr_ms = self._ema(self.avg_ocr_ms, ocr_ms)
             self._plate_ocr_pending.discard(obj_id)
             if tmp_path:
                 try:
@@ -854,6 +977,7 @@ class LiveProcessor:
             print(f"[LiveProcessor] Snapshot failed: {exc}")
 
         if self._pipeline:
+            self.violations_submitted += 1
             _t.Thread(
                 target=lambda: self._pipeline.submit_violation(frame.copy(), event),
                 daemon=True,

@@ -1,9 +1,10 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ lang or 'en' }}" data-theme="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{% block title %}Crosswalk Enforcement System{% endblock %}</title>
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='img/wiut-logo.svg') }}">
 
   <!-- Google Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -128,6 +129,31 @@
     @media (max-width: 480px) {
       .chat-panel { width: calc(100vw - 24px); right: 12px; bottom: 80px; }
     }
+
+    /* ── Language switcher ── */
+    .lang-btn {
+      display: inline-flex; align-items: center; gap: 5px;
+      background: transparent; border: 1px solid var(--border);
+      border-radius: 6px; padding: 4px 9px;
+      color: var(--text-secondary); font-family: var(--font-body); font-size: 12px;
+      cursor: pointer; transition: border-color 120ms, color 120ms;
+    }
+    .lang-btn:hover { border-color: var(--accent-amber); color: var(--text-primary); }
+    .lang-dropdown {
+      display: none; position: absolute; right: 0; top: calc(100% + 6px);
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: 8px; min-width: 130px; overflow: hidden;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.4); z-index: 900;
+    }
+    .lang-dropdown.open { display: block; }
+    .lang-option {
+      display: block; padding: 9px 14px;
+      font-family: var(--font-body); font-size: 13px;
+      color: var(--text-secondary); text-decoration: none;
+      transition: background 100ms, color 100ms;
+    }
+    .lang-option:hover { background: var(--bg-secondary); color: var(--text-primary); }
+    .lang-option.active { color: var(--accent-amber); font-weight: 600; }
   </style>
 
   {% block extra_css %}{% endblock %}
@@ -145,14 +171,8 @@
 <nav class="nav-bar">
   <!-- Brand -->
   <a href="{{ url_for('index') }}" class="nav-brand">
-    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-      <rect x="1" y="5" width="11" height="8" rx="1.5" stroke="currentColor" stroke-width="1.5"/>
-      <path d="M12 8.5L17 6v7l-5-2.5" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
-      <circle cx="5.5" cy="9" r="1.5" fill="currentColor"/>
-      <line x1="5" y1="13" x2="5" y2="16" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-      <line x1="3" y1="16" x2="7" y2="16" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-    </svg>
-    <span>Crosswalk <span class="brand-accent">Enforcement</span> System</span>
+    <img src="{{ url_for('static', filename='img/wiut-logo.svg') }}" alt="WIUT logo" style="width:20px;height:20px;display:block;flex-shrink:0;">
+    <span>{{ t('nav.brand') }}</span>
   </a>
 
   <!-- Right side -->
@@ -160,19 +180,23 @@
     {% if session.get('admin') %}
       <a href="{{ url_for('admin_dashboard') }}"
          class="nav-link {% if request.endpoint == 'admin_dashboard' %}active{% endif %}">
-        Dashboard
+        {{ t('nav.dashboard') }}
       </a>
       <a href="{{ url_for('admin_violations') }}"
          class="nav-link {% if request.endpoint in ['admin_violations','admin_violation_detail'] %}active{% endif %}">
-        Violations
+        {{ t('nav.violations') }}
       </a>
       <a href="{{ url_for('admin_vehicles') }}"
          class="nav-link {% if request.endpoint in ['admin_vehicles','admin_vehicle_detail'] %}active{% endif %}">
-        Vehicles
+        {{ t('nav.vehicles') }}
       </a>
       <a href="{{ url_for('admin_analytics') }}"
          class="nav-link {% if request.endpoint == 'admin_analytics' %}active{% endif %}">
-        Analytics
+        {{ t('nav.analytics') }}
+      </a>
+      <a href="{{ url_for('admin_admins') }}"
+        class="nav-link {% if request.endpoint in ['admin_admins'] %}active{% endif %}">
+        {{ t('nav.admins') }}
       </a>
       <a href="{{ url_for('admin_live') }}"
          class="nav-link {% if request.endpoint == 'admin_live' %}active{% endif %}"
@@ -180,7 +204,7 @@
         <span style="display:inline-flex;align-items:center;gap:5px;">
           <span style="width:6px;height:6px;border-radius:50%;background:var(--accent-green);
                        display:inline-block;box-shadow:0 0 5px var(--accent-green);"></span>
-          Live
+          {{ t('nav.live') }}
         </span>
       </a>
       <a href="{{ url_for('admin_cameras') }}"
@@ -191,12 +215,54 @@
             <rect x="0.5" y="2.5" width="7" height="5" rx="1" stroke="currentColor" stroke-width="1.2"/>
             <path d="M7.5 5l3.5-2v6l-3.5-2" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/>
           </svg>
-          Cameras
+          {{ t('nav.cameras') }}
         </span>
       </a>
-      <a href="{{ url_for('admin_export_csv') }}" class="nav-link">Export</a>
-      <a href="{{ url_for('admin_logout') }}" class="btn-danger btn-sm" style="margin-left:10px;">Logout</a>
+      <a href="{{ url_for('admin_export_csv') }}" class="nav-link">{{ t('nav.export') }}</a>
+      <a href="{{ url_for('admin_logout') }}" class="btn-danger btn-sm" style="margin-left:10px;">{{ t('nav.logout') }}</a>
     {% endif %}
+
+    <!-- ── Language switcher ─────────────────────────────────────── -->
+    <div class="theme-switcher" style="margin-left:8px; position:relative;">
+      <button class="lang-btn" onclick="this.nextElementSibling.classList.toggle('open')" title="{{ t('lang.theme') }}">
+        <svg width="13" height="13" viewBox="0 0 20 20" fill="none" style="flex-shrink:0;">
+          <circle cx="10" cy="10" r="4" stroke="currentColor" stroke-width="1.5"/>
+          <path d="M10 1v3M10 16v3M1 10h3M16 10h3M3.6 3.6l2.2 2.2M14.2 14.2l2.2 2.2M16.4 3.6l-2.2 2.2M5.8 14.2l-2.2 2.2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+        </svg>
+        <span id="theme-current-label">{{ t('lang.dark') }}</span>
+        <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+          <path d="M2 3.5l3 3 3-3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+        </svg>
+      </button>
+      <div class="lang-dropdown theme-dropdown">
+        <a href="#" class="lang-option" data-theme-choice="dark">{{ t('lang.dark') }}</a>
+        <a href="#" class="lang-option" data-theme-choice="light">{{ t('lang.light') }}</a>
+      </div>
+    </div>
+
+    <div class="lang-switcher" style="margin-left:12px; position:relative;">
+      <button class="lang-btn" onclick="this.nextElementSibling.classList.toggle('open')" title="{{ t('lang.choose') }}">
+        <svg width="13" height="13" viewBox="0 0 20 20" fill="none" style="flex-shrink:0;">
+          <circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="1.5"/>
+          <path d="M10 2C10 2 7 6 7 10s3 8 3 8" stroke="currentColor" stroke-width="1.2"/>
+          <path d="M10 2c0 0 3 4 3 8s-3 8-3 8" stroke="currentColor" stroke-width="1.2"/>
+          <path d="M2 10h16" stroke="currentColor" stroke-width="1.2"/>
+          <path d="M3 6h14M3 14h14" stroke="currentColor" stroke-width="1" opacity="0.5"/>
+        </svg>
+        <span>{{ SUPPORTED_LANGS[lang] }}</span>
+        <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+          <path d="M2 3.5l3 3 3-3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+        </svg>
+      </button>
+      <div class="lang-dropdown">
+        {% for code, label in SUPPORTED_LANGS.items() %}
+        <a href="{{ url_for('set_language', lang=code, next=request.url) }}"
+           class="lang-option {% if code == lang %}active{% endif %}">
+          {{ label }}
+        </a>
+        {% endfor %}
+      </div>
+    </div>
   </div>
 </nav>
 {% endblock %}
@@ -206,15 +272,15 @@
 </div>
 
 <footer class="site-footer">
-  WIUT Traffic Enforcement System &middot; {{ current_year }}
+  {{ t('footer.text') }} &middot; {{ current_year }}
 </footer>
 
 <!-- Global toast container -->
 <div id="toast-container"></div>
 
 <!-- ── Floating AI Chat ────────────────────────────────────────────────── -->
-<button id="chat-fab" class="chat-fab" onclick="toggleChat()" title="Chat with AI Assistant"
-        aria-label="Open AI chat" style="display:none;">
+<button id="chat-fab" class="chat-fab" onclick="toggleChat()" title="{{ t('chat.title') }}"
+  aria-label="{{ t('chat.title') }}" style="display:none;">
   <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
     <path d="M3 4a2 2 0 012-2h12a2 2 0 012 2v9a2 2 0 01-2 2H7l-4 4V4z"
           stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" fill="none"/>
@@ -223,28 +289,28 @@
   </svg>
 </button>
 
-<div id="chat-panel" class="chat-panel" style="display:none;" aria-label="AI chat panel">
+<div id="chat-panel" class="chat-panel" style="display:none;" aria-label="{{ t('chat.title') }}">
   <div class="chat-header">
     <div class="chat-header-title">
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="flex-shrink:0;">
         <circle cx="8" cy="8" r="6" stroke="var(--accent-amber)" stroke-width="1.4"/>
         <circle cx="8" cy="8" r="2.5" fill="var(--accent-amber)" opacity="0.6"/>
       </svg>
-      AI Assistant
+      {{ t('chat.title') }}
     </div>
     <div style="display:flex; align-items:center; gap:8px;">
-      <button class="chat-ctrl-btn" onclick="clearChat()" title="Clear history">↺</button>
-      <button class="chat-ctrl-btn" onclick="toggleChat()" title="Close">✕</button>
+      <button class="chat-ctrl-btn" onclick="clearChat()" title="{{ t('chat.clear') }}">↺</button>
+      <button class="chat-ctrl-btn" onclick="toggleChat()" title="{{ t('chat.close') }}">✕</button>
     </div>
   </div>
   <div id="chat-messages" class="chat-messages">
     <div class="chat-msg assistant">
-      <div class="chat-bubble">Hello! I have access to your violation database and live system status. Ask me anything about recent violations, patterns, top offenders, or the current camera feed.</div>
+      <div class="chat-bubble">{{ t('chat.welcome') }}</div>
     </div>
   </div>
   <div class="chat-input-row">
     <textarea id="chat-input" class="chat-textarea" rows="1"
-              placeholder="Ask about violations, stats, patterns…"
+              placeholder="{{ t('chat.placeholder') }}"
               onkeydown="chatKeydown(event)"></textarea>
     <button id="chat-send" class="chat-send-btn" onclick="sendChatMessage()">
       <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
@@ -303,6 +369,47 @@
 
     /* Kick off counter animations */
     document.querySelectorAll("[data-count]").forEach(animateCounter);
+
+    /* Close language dropdown when clicking outside */
+    document.addEventListener("click", function(e) {
+      var sw = document.querySelector(".lang-switcher");
+      if (sw && !sw.contains(e.target)) {
+        var dd = sw.querySelector(".lang-dropdown");
+        if (dd) dd.classList.remove("open");
+      }
+      var tw = document.querySelector(".theme-switcher");
+      if (tw && !tw.contains(e.target)) {
+        var td = tw.querySelector(".theme-dropdown");
+        if (td) td.classList.remove("open");
+      }
+    });
+
+    var themeLabel = document.getElementById("theme-current-label");
+    var lightText = {{ t('lang.light')|tojson }};
+    var darkText = {{ t('lang.dark')|tojson }};
+    var savedTheme = localStorage.getItem("ui_theme") || "dark";
+
+    function applyTheme(theme) {
+      var normalized = theme === "light" ? "light" : "dark";
+      document.documentElement.setAttribute("data-theme", normalized);
+      localStorage.setItem("ui_theme", normalized);
+      if (themeLabel) themeLabel.textContent = normalized === "light" ? lightText : darkText;
+      var opts = document.querySelectorAll("[data-theme-choice]");
+      opts.forEach(function (o) {
+        o.classList.toggle("active", o.dataset.themeChoice === normalized);
+      });
+    }
+
+    document.querySelectorAll("[data-theme-choice]").forEach(function (opt) {
+      opt.addEventListener("click", function (e) {
+        e.preventDefault();
+        applyTheme(opt.dataset.themeChoice);
+        var menu = opt.closest(".theme-dropdown");
+        if (menu) menu.classList.remove("open");
+      });
+    });
+
+    applyTheme(savedTheme);
   });
 
   /* Expose globally so live page can call injectScanCorners */

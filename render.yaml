@@ -2,8 +2,11 @@ services:
   - type: web
     name: crosswalk-enforcement
     runtime: python
+    plan: free
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn app:app --bind 0.0:$PORT --workers 2 --threads 4 --timeout 120
+    healthCheckPath: /
+    autoDeploy: true
     envVars:
       - key: PYTHONPATH
         value: src

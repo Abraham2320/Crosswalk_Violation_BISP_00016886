@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Invoice — {{ violation.id[:8] }}{% endblock %}
+{% block title %}{{ t('invoice.title') }} — {{ violation.id[:8] }}{% endblock %}
 
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
@@ -363,12 +363,12 @@
 
   <!-- Action buttons -->
   <div class="invoice-actions">
-    <a href="{{ url_for('admin_violation_detail', violation_id=violation.id) }}"
-       class="btn-ghost btn-sm">&larr; Back</a>
+     <a href="{{ url_for('admin_violation_detail', violation_id=violation.id) }}"
+       class="btn-ghost btn-sm">{{ t('invoice.back') }}</a>
     <button class="btn-primary btn-sm" onclick="window.print()">
-      &#128438; Print / Save PDF
+      &#128438; {{ t('invoice.print_pdf') }}
     </button>
-    <a href="{{ url_for('admin_violations') }}" class="btn-ghost btn-sm">All Violations</a>
+    <a href="{{ url_for('admin_violations') }}" class="btn-ghost btn-sm">{{ t('invoice.all_violations') }}</a>
   </div>
 
   <!-- Invoice document -->
@@ -377,15 +377,15 @@
     <!-- Header -->
     <div class="inv-header">
       <div class="inv-org">
-        <div class="inv-org-name">WIUT Traffic Enforcement System</div>
-        <div class="inv-org-sub">Westminster International University in Tashkent</div>
-        <div class="inv-org-sub">Istiqbol St 12, Tashkent 100047, Uzbekistan</div>
+        <div class="inv-org-name">{{ t('invoice.org_name') }}</div>
+        <div class="inv-org-sub">{{ t('invoice.org_sub1') }}</div>
+        <div class="inv-org-sub">{{ t('invoice.org_sub2') }}</div>
       </div>
       <div class="inv-doc-info">
-        <div class="inv-doc-type">Violation Notice</div>
+        <div class="inv-doc-type">{{ t('invoice.title') }}</div>
         <div class="inv-doc-ref">REF: {{ violation.id[:8].upper() }}-{{ violation.timestamp[:10].replace('-','') if violation.timestamp else 'N/A' }}</div>
         <div class="inv-doc-date">
-          Issued: {{ violation.timestamp[:10] if violation.timestamp else '—' }}
+          {{ t('invoice.issued') }}: {{ violation.timestamp[:10] if violation.timestamp else '—' }}
         </div>
       </div>
     </div>
@@ -394,8 +394,8 @@
     <div class="inv-status-bar">
       <span>&#9888;</span>
       <span>
-        {% if violation.severity == 'HIGH' %}HIGH SEVERITY{% else %}LOW SEVERITY{% endif %}
-        CROSSWALK VIOLATION RECORDED
+        {% if violation.severity == 'HIGH' %}{{ t('invoice.high_severity') }}{% else %}{{ t('invoice.low_severity') }}{% endif %}
+        {{ t('invoice.violation_recorded') }}
       </span>
     </div>
 
@@ -407,17 +407,17 @@
 
         <!-- Plate -->
         <div class="inv-plate-widget">
-          <div class="inv-section-title">Vehicle Plate</div>
+          <div class="inv-section-title">{{ t('invoice.vehicle_plate') }}</div>
           {% if violation.plate_number %}
             <div class="uzbek-plate">
               <div class="plate-country">🇺🇿 UZ</div>
               <div class="plate-number">{{ violation.plate_number }}</div>
             </div>
           {% else %}
-            <div class="plate-undetected">UNDETECTED</div>
+            <div class="plate-undetected">{{ t('invoice.undetected') }}</div>
           {% endif %}
           <div style="margin-top:16px;">
-            <div class="inv-section-title">Violation</div>
+            <div class="inv-section-title">{{ t('invoice.violation_section') }}</div>
             {% if violation.severity == 'HIGH' %}
               <span class="badge badge-high pulse-amber" style="margin-right:8px;">HIGH</span>
             {% else %}
@@ -431,34 +431,34 @@
 
         <!-- Details -->
         <div>
-          <div class="inv-section-title">Violation Details</div>
+          <div class="inv-section-title">{{ t('invoice.section_details') }}</div>
           <div class="inv-details">
             <div class="inv-row">
-              <span class="inv-key">Date &amp; Time</span>
+              <span class="inv-key">{{ t('invoice.date_time') }}</span>
               <span class="inv-val">
                 {{ violation.timestamp[:19].replace('T',' ') if violation.timestamp else '—' }}
               </span>
             </div>
             <div class="inv-row">
-              <span class="inv-key">Vehicle ID</span>
+              <span class="inv-key">{{ t('invoice.vehicle_id') }}</span>
               <span class="inv-val">VEH-{{ violation.vehicle_id }}</span>
             </div>
             <div class="inv-row">
-              <span class="inv-key">Location</span>
+              <span class="inv-key">{{ t('invoice.location') }}</span>
               <span class="inv-val">{{ violation.display_location or '—' }}</span>
             </div>
             {% if violation.location_address %}
             <div class="inv-row">
-              <span class="inv-key">Address</span>
+              <span class="inv-key">{{ t('invoice.address') }}</span>
               <span class="inv-val">{{ violation.location_address }}</span>
             </div>
             {% endif %}
             <div class="inv-row">
-              <span class="inv-key">Type</span>
+              <span class="inv-key">{{ t('invoice.type') }}</span>
               <span class="inv-val">{{ (violation.violation_type or '').replace('_',' ') }}</span>
             </div>
             <div class="inv-row">
-              <span class="inv-key">Confidence</span>
+              <span class="inv-key">{{ t('invoice.confidence') }}</span>
               <span class="inv-val">
                 {% set cp = (violation.confidence * 100)|round|int if violation.confidence else 0 %}
                 {% if cp >= 80 %}
@@ -470,15 +470,15 @@
             </div>
             {% if violation.vehicle_speed_estimate %}
             <div class="inv-row">
-              <span class="inv-key">Speed Est.</span>
+              <span class="inv-key">{{ t('invoice.speed_est') }}</span>
               <span class="inv-val">{{ violation.vehicle_speed_estimate|round(1) }} px/frame</span>
             </div>
             {% endif %}
             <div class="inv-row">
-              <span class="inv-key">Status</span>
+              <span class="inv-key">{{ t('invoice.status') }}</span>
               <span class="inv-val">
                 {% if violation.status == 'processed' %}
-                  <span class="badge badge-ok">Processed</span>
+                  <span class="badge badge-ok">{{ t('invoice.processed') }}</span>
                 {% else %}
                   <span class="badge" style="border-color:var(--border); color:var(--text-secondary);">{{ violation.status or '—' }}</span>
                 {% endif %}
@@ -491,20 +491,20 @@
 
       <!-- Snapshot / evidence -->
       <div class="inv-evidence">
-        <div class="inv-section-title">Evidence — Moment of Violation</div>
+        <div class="inv-section-title">{{ t('invoice.evidence') }}</div>
         {% if violation.snapshot_path %}
           <img class="inv-snapshot-img"
                src="{{ url_for('static', filename=violation.snapshot_path) }}"
-               alt="Violation snapshot"
-               onerror="this.outerHTML='<div class=inv-snapshot-none>Snapshot file not found</div>'">
+            alt="{{ t('invoice.evidence') }}"
+               onerror="this.outerHTML='<div class=inv-snapshot-none>{{ t('invoice.snapshot_not_found') }}</div>'">
         {% else %}
-          <div class="inv-snapshot-none">No snapshot captured for this record</div>
+          <div class="inv-snapshot-none">{{ t('invoice.no_snapshot') }}</div>
         {% endif %}
         {% if violation.plate_crop_path %}
           <div style="margin-top:12px;">
-            <div class="inv-section-title" style="margin-bottom:6px;">Plate Crop</div>
+            <div class="inv-section-title" style="margin-bottom:6px;">{{ t('invoice.plate_crop') }}</div>
             <img src="{{ url_for('static', filename=violation.plate_crop_path) }}"
-                 alt="Plate crop"
+                alt="{{ t('invoice.plate_crop') }}"
                  style="max-height:80px; border:1px solid rgba(245,158,11,0.3); border-radius:var(--radius); display:block; object-fit:contain; background:var(--bg-elevated); padding:4px;"
                  onerror="this.parentElement.style.display='none';">
           </div>
@@ -514,7 +514,7 @@
       <!-- Location map -->
       <div class="inv-map-section">
         <div class="inv-section-title">
-          Location
+          {{ t('invoice.location') }}
           {% if violation.latitude %}
             &mdash; {{ violation.latitude|round(5) }}, {{ violation.longitude|round(5) }}
           {% endif %}
@@ -565,14 +565,14 @@
                     stroke="currentColor" stroke-width="1.5"/>
               <circle cx="12" cy="9" r="2.5" stroke="currentColor" stroke-width="1.5"/>
             </svg>
-            <span>{{ violation.display_location or 'Location recorded' }}</span>
+            <span>{{ violation.display_location or t('invoice.location') }}</span>
             <span>{{ violation.latitude|round(5) }}, {{ violation.longitude|round(5) }}</span>
             <a href="https://yandex.com/maps/?ll={{ violation.longitude }},{{ violation.latitude }}&z=17&pt={{ violation.longitude }},{{ violation.latitude }},pm2rdm"
                target="_blank" rel="noopener noreferrer" class="btn-ghost btn-sm" style="margin-top:8px;">
-              Open in Yandex Maps
+              {{ t('invoice.open_yandex') }}
             </a>
             <span style="font-size:10px; margin-top:4px;">
-              Set YANDEX_MAPS_API_KEY in .env to embed the map here.
+              {{ t('invoice.map_api_hint') }}
             </span>
           </div>
         {% else %}
@@ -582,8 +582,8 @@
                     stroke="currentColor" stroke-width="1.5"/>
               <circle cx="12" cy="9" r="2.5" stroke="currentColor" stroke-width="1.5"/>
             </svg>
-            <span>{{ violation.display_location or 'Location not recorded' }}</span>
-            <span style="font-size:10px;">Set LOCATION_LATITUDE / LOCATION_LONGITUDE env vars to enable map.</span>
+            <span>{{ violation.display_location or t('invoice.no_location') }}</span>
+            <span style="font-size:10px;">{{ t('invoice.map_env_hint') }}</span>
           </div>
         {% endif %}
       </div>
@@ -591,27 +591,27 @@
       <!-- Fine amount -->
       <div class="inv-fine">
         <div>
-          <div class="inv-fine-label">Fine Amount</div>
+          <div class="inv-fine-label">{{ t('invoice.fine_amount') }}</div>
           <div>
             <span class="inv-fine-amount">150,000</span>
             <span class="inv-fine-currency">UZS</span>
           </div>
         </div>
         <div class="inv-fine-deadline">
-          <div class="inv-fine-deadline-label">Payment Deadline</div>
+          <div class="inv-fine-deadline-label">{{ t('invoice.payment_deadline') }}</div>
           <div class="inv-fine-deadline-date">{{ deadline }}</div>
         </div>
       </div>
 
       <!-- Payment instructions -->
       <div class="inv-payment">
-        <div class="inv-payment-title">Payment Instructions</div>
+        <div class="inv-payment-title">{{ t('invoice.payment_instructions') }}</div>
         <ul>
-          <li>Pay online via the Unified Interbank Processing Centre (UZCARD / HUMO).</li>
-          <li>Visit any branch of Xalq Bank, Asaka Bank, or Ipoteka Bank with this notice.</li>
-          <li>Quote reference number: <strong style="color:var(--accent-amber);">{{ violation.id[:8].upper() }}</strong> when making payment.</li>
-          <li>Failure to pay within 30 days may result in an additional penalty of 50,000 UZS.</li>
-          <li>For disputes contact: enforcement@wiut.uz or +998 71 238 74 00.</li>
+          <li>{{ t('invoice.pay_1') }}</li>
+          <li>{{ t('invoice.pay_2') }}</li>
+          <li>{{ t('invoice.pay_3') }}: <strong style="color:var(--accent-amber);">{{ violation.id[:8].upper() }}</strong> {{ t('invoice.pay_3_suffix') }}</li>
+          <li>{{ t('invoice.pay_4') }}</li>
+          <li>{{ t('invoice.pay_5') }}</li>
         </ul>
       </div>
 
@@ -623,7 +623,7 @@
         REF {{ violation.id[:8].upper() }} &nbsp;·&nbsp; {{ violation.timestamp[:10] if violation.timestamp else '' }}
       </div>
       <div class="inv-footer-stamp">
-        WIUT Traffic Enforcement &middot; {{ current_year }}
+        {{ t('invoice.footer_stamp') }} &middot; {{ current_year }}
       </div>
     </div>
 

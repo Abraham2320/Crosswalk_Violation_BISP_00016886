@@ -84,6 +84,35 @@ def init_db() -> None:
             )
         """)
 
+        # ── cameras table (admin-manageable camera registry) ─────────────────
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS cameras (
+                id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                cam_id         TEXT UNIQUE NOT NULL,
+                label          TEXT NOT NULL,
+                default_source TEXT NOT NULL DEFAULT '0',
+                demo_source    TEXT NOT NULL DEFAULT '',
+                location_name  TEXT NOT NULL DEFAULT 'Crosswalk A',
+                latitude       REAL NOT NULL DEFAULT 41.2963,
+                longitude      REAL NOT NULL DEFAULT 69.2798,
+                tags           TEXT NOT NULL DEFAULT '',
+                is_active      INTEGER NOT NULL DEFAULT 1,
+                created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+        # Ensure camera metadata columns exist for older DBs.
+        cam_cols = _existing_columns(conn, "cameras")
+        for col, col_type in {
+            "location_name": "TEXT NOT NULL DEFAULT 'Crosswalk A'",
+            "latitude": "REAL NOT NULL DEFAULT 41.2963",
+            "longitude": "REAL NOT NULL DEFAULT 69.2798",
+            "tags": "TEXT NOT NULL DEFAULT ''",
+        }.items():
+            if col not in cam_cols:
+                conn.execute(f"ALTER TABLE cameras ADD COLUMN {col} {col_type}")
+
         # ── default admin (once) ─────────────────────────────────────────────
         row = conn.execute(
             "SELECT id FROM admin_users WHERE username = ?", ("admin",)
@@ -92,6 +121,24 @@ def init_db() -> None:
             conn.execute(
                 "INSERT INTO admin_users (username, password_hash) VALUES (?, ?)",
                 ("admin", generate_password_hash("admin1234")),
+            )
+
+        # ── default cameras (once) ───────────────────────────────────────────
+        cam_count = conn.execute("SELECT COUNT(*) FROM cameras").fetchone()[0]
+        if cam_count == 0:
+            conn.executemany(
+                """
+                INSERT INTO cameras (
+                    cam_id, label, default_source, demo_source,
+                    location_name, latitude, longitude, tags, is_active
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
+                """,
+                [
+                    ("cam1", "Camera 1 - Entrance", "0", "Videos/v1.mp4", "Entrance Gate", 41.2963, 69.2798, "entrance, north"),
+                    ("cam2", "Camera 2 - Crosswalk", "0", "Videos/v2.mp4", "Main Crosswalk", 41.2965, 69.2801, "crosswalk, school-zone"),
+                    ("cam3", "Camera 3 - Exit", "0", "Videos/v3.mp4", "Exit Lane", 41.2961, 69.2794, "exit, south"),
+                ],
             )
 
 
