@@ -1,4 +1,4 @@
-# ── Stage 1: build ────────────────────────────────────────────────────────────
+# ── Stage 1: dependencies ──────────────────────────────────────────────────────
 FROM python:3.12-slim AS base
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -21,16 +21,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# ── Stage 2: app ──────────────────────────────────────────────────────────────
+# ── Stage 2: application ───────────────────────────────────────────────────────
 FROM base AS app
 
 COPY . .
 
-# Ensure runtime directories exist
+# Ensure runtime directories exist (DB, snapshots, artifacts)
 RUN mkdir -p static/snapshots artifacts/frames artifacts/vehicles \
-             artifacts/plates artifacts/invoices artifacts/reports
+             artifacts/plates artifacts/invoices artifacts/reports \
+             Videos
 
-# Default environment (override at runtime via -e or .env)
+# Pre-download YOLOv8n weights so the container doesn't reach out at runtime.
+# This makes the image larger but the app starts instantly offline.
+RUN python -c "from ultralytics import YOLO; YOLO('yolov8n.pt')" || true
+
+# Default environment — override at runtime via Railway/Render/Fly env vars or .env
 ENV FLASK_ENV=production \
     CAMERA_SOURCE=0 \
     LOCATION_NAME="Crosswalk A" \
@@ -38,9 +43,12 @@ ENV FLASK_ENV=production \
     LOCATION_LATITUDE=41.2963 \
     LOCATION_LONGITUDE=69.2798 \
     DEFAULT_FINE_AMOUNT=150000 \
-    AUTHORITY_NAME="WIUT Traffic Enforcement Unit"
+    AUTHORITY_NAME="WIUT Traffic Enforcement Unit" \
+    # 1 worker + 4 threads fits in 512 MB RAM; scale up on larger instances
+    WEB_CONCURRENCY=1
 
 EXPOSE 5000
 
-# Gunicorn for production; falls back to Flask dev server if gunicorn missing
-CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:5000 --workers 2 --threads 4 --timeout 120 app:app 2>/dev/null || python app.py"]
+# Gunicorn: 1 worker (enough for demo), 4 threads for concurrent requests,
+# 120 s timeout for slow CV operations.
+CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT:-5000} --workers ${WEB_CONCURRENCY:-1} --threads 4 --timeout 120 app:app"]

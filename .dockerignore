@@ -1,0 +1,47 @@
+# Virtual environments — never copy these, pip installs them fresh
+CV_venv/
+venv/
+.venv/
+
+# Git and CI
+.git/
+.gitignore
+.github/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# Vercel / deployment metadata
+.vercel/
+vercel.json
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+
+# Runtime-generated data (mounted as volumes in production)
+crosswalk_violations.db
+static/snapshots/
+artifacts/
+
+# Demo videos (large files — mount or stream instead)
+Videos/
+
+# Environment secrets
+.env
+
+# Docs
+docs/
+*.md
+
+# Test fixtures
+tests/
