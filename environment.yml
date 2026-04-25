@@ -1,0 +1,50 @@
+name: crosswalk
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.10
+
+  # ── PyTorch with CUDA (conda-forge bundles the CUDA runtime — no separate toolkit needed) ──
+  - pytorch>=2.10        # conda-forge CUDA build resolves GPU libs automatically
+  - torchvision
+  - torchaudio
+
+  # ── Core CV ──────────────────────────────────────────────────────────────────
+  - numpy>=1.26
+  - opencv               # conda-forge package name (provides cv2)
+  - pillow>=10
+
+  # ── Data / dashboard ─────────────────────────────────────────────────────────
+  - pandas>=2.1
+  - streamlit>=1.35
+
+  # ── REST API ──────────────────────────────────────────────────────────────────
+  - fastapi>=0.115
+  - uvicorn
+  - pydantic>=2.7
+  - pydantic-settings
+  - sqlalchemy>=2.0
+  - alembic>=1.13
+
+  # ── Web / Flask admin panel ───────────────────────────────────────────────────
+  - flask>=2.3
+  - werkzeug>=2.3
+  - gunicorn             # Linux/Mac only — skip on Windows, use uvicorn instead
+
+  # ── Reporting ─────────────────────────────────────────────────────────────────
+  - reportlab>=4.0
+
+  # ── Utilities ─────────────────────────────────────────────────────────────────
+  - python-dotenv>=1.0
+  - requests
+  - pip
+
+  # ── Pip-only packages (not available in conda-forge) ─────────────────────────
+  - pip:
+      - ultralytics>=8.2.0        # YOLOv8 + ByteTrack
+      - lap>=0.5.12               # Linear assignment (ByteTrack dependency)
+      - supervision>=0.21.0       # Tracker utilities
+      - easyocr>=1.7.1            # OCR backend
+      - anthropic>=0.28.0         # Claude API
+      - "psycopg[binary]>=3.1.0"  # PostgreSQL driver

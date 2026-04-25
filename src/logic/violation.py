@@ -15,11 +15,12 @@ from detector.tracker import PedestrianTrack, VehicleTrack
 # Constants
 # ---------------------------------------------------------------------------
 
-SAFE_ENTRY_DELAY_FRAMES: int = 45       # frames after ped exits; car entry within = violation
+SAFE_ENTRY_DELAY_FRAMES: int = 20       # frames after ped exits; car entry within = violation
 ENTRY_EVAL_WINDOW_FRAMES: int = 12      # tolerate frame drops and short tracking jitter
 YIELD_SPEED_THRESHOLD_PX: float = 4.0  # px/frame — below this counts as yielding
 TRACK_RESET_FRAMES: int = 90            # frames outside before ped track is pruned
 YIELD_MIN_SAMPLES: int = 4              # minimum pre-entry speed samples for yield judgement
+MIN_PED_ACTIVE_FRAMES: int = 4          # ped must be in CROSSING/CLEARING for this many frames before a violation can fire
 
 
 # ---------------------------------------------------------------------------
@@ -176,36 +177,40 @@ def update_pedestrian_state(
 
     in_polygon = _ped_in_polygon(ped_track, polygon)
 
+    def _set_state(new_state: str) -> None:
+        ped_track.state = new_state
+        ped_track.state_since_frame = frame_number
+
     if ped_track.state == "OUTSIDE":
         if in_polygon:
-            ped_track.state = "ENTERING"
+            _set_state("ENTERING")
             ped_track.entry_frame = frame_number
             ped_track.frames_outside_count = 0
 
     elif ped_track.state == "ENTERING":
         if not in_polygon:
-            ped_track.state = "OUTSIDE"
+            _set_state("OUTSIDE")
         elif pedestrian_is_in_exit_zone(ped_track.centroid, polygon_midline, approach_axis):
-            ped_track.state = "CLEARING"
+            _set_state("CLEARING")
             ped_track.midline_crossed_frame = frame_number
         else:
-            ped_track.state = "CROSSING"
+            _set_state("CROSSING")
 
     elif ped_track.state == "CROSSING":
         if not in_polygon:
-            ped_track.state = "OUTSIDE"
+            _set_state("OUTSIDE")
         elif pedestrian_is_in_exit_zone(ped_track.centroid, polygon_midline, approach_axis):
-            ped_track.state = "CLEARING"
+            _set_state("CLEARING")
             ped_track.midline_crossed_frame = frame_number
 
     elif ped_track.state == "CLEARING":
         if not in_polygon:
-            ped_track.state = "EXITED"
+            _set_state("EXITED")
             ped_track.exit_frame = frame_number
 
     elif ped_track.state == "EXITED":
         if in_polygon:
-            ped_track.state = "ENTERING"
+            _set_state("ENTERING")
             ped_track.entry_frame = frame_number
             ped_track.exit_frame = None
             ped_track.frames_outside_count = 0
@@ -232,13 +237,13 @@ def was_yielding(
     Returns False (not yielding) when no snapshot is available.
     """
     if not car_track.pre_entry_velocity_snapshot:
-        return False
+        return True   # no data → assume yielding to avoid false positives
     speeds = np.array(
         [math.hypot(dx, dy) for dx, dy in car_track.pre_entry_velocity_snapshot],
         dtype=float,
     )
     if speeds.size < YIELD_MIN_SAMPLES:
-        return False
+        return True   # insufficient samples → assume yielding
 
     # Require sustained low speed, not just one low-noise frame.
     p70 = float(np.percentile(speeds, 70))
@@ -282,7 +287,21 @@ def check_violation(
     ped_overlaps = _ped_in_polygon(ped_track, polygon)
     car_not_yielding = not was_yielding(car_track)
 
-    if ped_state in ("ENTERING", "CROSSING", "CLEARING") and ped_overlaps and car_not_yielding:
+    # Require the pedestrian to have been in an active state for at least
+    # MIN_PED_ACTIVE_FRAMES frames before we fire — prevents edge-case false
+    # positives where a ped just stepped into the zone (1 frame) and a car
+    # happened to enter at the same instant.
+    ped_frames_active = (
+        (frame_number - ped_track.state_since_frame)
+        if ped_track.state_since_frame is not None else 0
+    )
+
+    if (
+        ped_state in ("ENTERING", "CROSSING", "CLEARING")
+        and ped_overlaps
+        and car_not_yielding
+        and ped_frames_active >= MIN_PED_ACTIVE_FRAMES
+    ):
         return Violation(
             car_id=car_track.track_id,
             ped_id=ped_track.track_id,

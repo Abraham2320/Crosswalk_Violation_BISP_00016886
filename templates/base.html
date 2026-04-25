@@ -218,6 +218,17 @@
           {{ t('nav.cameras') }}
         </span>
       </a>
+      <a href="{{ url_for('admin_chatbot') }}"
+         class="nav-link {% if request.endpoint == 'admin_chatbot' %}active{% endif %}"
+         style="{% if request.endpoint == 'admin_chatbot' %}color:var(--accent-amber);{% endif %}">
+        <span style="display:inline-flex;align-items:center;gap:5px;">
+          <svg width="12" height="12" viewBox="0 0 20 20" fill="none" style="flex-shrink:0">
+            <path d="M18 10c0 4.418-3.582 8-8 8a8.01 8.01 0 01-3.865-.99L2 19l1.99-4.135A8 8 0 1118 10z"
+                  stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+          </svg>
+          AI Chat
+        </span>
+      </a>
       <a href="{{ url_for('admin_export_csv') }}" class="nav-link">{{ t('nav.export') }}</a>
       <a href="{{ url_for('admin_logout') }}" class="btn-danger btn-sm" style="margin-left:10px;">{{ t('nav.logout') }}</a>
     {% endif %}

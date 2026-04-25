@@ -45,6 +45,11 @@ def upgrade() -> None:
         sa.Column("llm_report_json", sa.Text(), nullable=True),
         sa.Column("llm_report_text", sa.Text(), nullable=True),
         sa.Column("vehicle_ref_id", sa.String(length=64), sa.ForeignKey("vehicles.id", ondelete="SET NULL"), nullable=True),
+        sa.Column("severity", sa.String(length=32), nullable=False, server_default="HIGH"),
+        sa.Column("snapshot_path", sa.Text(), nullable=True),
+        sa.Column("location_name", sa.String(length=255), nullable=True),
+        sa.Column("vehicle_speed_estimate", sa.Float(), nullable=True),
+        sa.Column("plate_crop_path", sa.Text(), nullable=True),
     )
     op.create_index("ix_violations_plate_number", "violations", ["plate_number"], unique=False)
     op.create_index("ix_violations_plate_timestamp", "violations", ["plate_number", "timestamp"], unique=False)

@@ -42,9 +42,75 @@ from auth import (
     record_failed_attempt,
 )
 from database import db_connection, init_db, log_audit
-from live_processor import live_proc, proc_registry
 from src.i18n import get_locale, t_for, SUPPORTED_LANGS
-from stream import camera_manager, mjpeg_generator, registry as cam_registry, CAMERA_CONFIGS
+
+try:
+    from live_processor import live_proc, proc_registry
+    from stream import camera_manager, mjpeg_generator, registry as cam_registry, CAMERA_CONFIGS
+except Exception:
+    _FALLBACK_JPEG = b""
+
+    class _NullCamera:
+        def __init__(self):
+            self.source = "unavailable"
+
+        def start(self, source):
+            self.source = str(source)
+            return False
+
+        def stop(self):
+            return None
+
+        def get_jpeg(self):
+            return _FALLBACK_JPEG
+
+        def status(self):
+            return {
+                "connected": False,
+                "source": self.source,
+                "fps": 0.0,
+                "width": 0,
+                "height": 0,
+                "error": "Live camera runtime is unavailable in this deployment.",
+            }
+
+    class _NullProc:
+        def start_async(self):
+            return False
+
+        def stop(self):
+            return None
+
+        def reload_polygon(self):
+            return None
+
+        def get_stats(self):
+            return {
+                "active": False,
+                "session_violations": 0,
+                "last_error": "Live detection runtime is unavailable in this deployment.",
+            }
+
+    class _NullRegistry:
+        def __init__(self, factory):
+            self._factory = factory
+            self._items = {}
+
+        def get(self, key):
+            if key not in self._items:
+                self._items[key] = self._factory()
+            return self._items[key]
+
+    def mjpeg_generator(_manager):
+        payload = b""
+        while True:
+            yield b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + payload + b"\r\n"
+
+    camera_manager = _NullCamera()
+    cam_registry = _NullRegistry(_NullCamera)
+    live_proc = _NullProc()
+    proc_registry = _NullRegistry(_NullProc)
+    CAMERA_CONFIGS = {}
 
 try:
     import anthropic as _anthropic
@@ -70,6 +136,28 @@ app.secret_key = os.getenv("SECRET_KEY", "cw-enforcement-dev-secret-change-in-pr
 
 with app.app_context():
     init_db()
+
+
+def _template_context() -> dict:
+    lang = get_locale()
+    return {
+        "current_year": datetime.now(timezone.utc).year,
+        "yandex_maps_key": os.getenv("YANDEX_MAPS_API_KEY", ""),
+        "camera_source_default": os.getenv("CAMERA_SOURCE", "0"),
+        "t": t_for(lang),
+        "lang": lang,
+        "SUPPORTED_LANGS": SUPPORTED_LANGS,
+        "yandex_maps_api_key": os.getenv("YANDEX_MAPS_API_KEY", ""),
+        "location_latitude": os.getenv("LOCATION_LATITUDE", "41.2963"),
+        "location_longitude": os.getenv("LOCATION_LONGITUDE", "69.2798"),
+        "location_name": os.getenv("LOCATION_NAME", "Crosswalk A"),
+    }
+
+
+app.jinja_env.globals.update(
+    t=lambda key, **kwargs: t_for(get_locale())(key, **kwargs),
+    SUPPORTED_LANGS=SUPPORTED_LANGS,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -735,16 +823,7 @@ def admin_audit():
 
 @app.context_processor
 def inject_globals():
-    lang = get_locale()
-    return {
-        "current_year":          datetime.now(timezone.utc).year,
-        "yandex_maps_key":       os.getenv("YANDEX_MAPS_API_KEY", ""),
-        "camera_source_default": os.getenv("CAMERA_SOURCE", "0"),
-        # i18n
-        "t":                     t_for(lang),
-        "lang":                  lang,
-        "SUPPORTED_LANGS":       SUPPORTED_LANGS,
-    }
+    return _template_context()
 
 
 # ---------------------------------------------------------------------------
@@ -1044,9 +1123,13 @@ def admin_live_polygon_save():
 _CHAT_SYSTEM = (
     "You are a traffic safety analyst assistant for a crosswalk violation detection "
     "system in Tashkent, Uzbekistan. You have direct access to live violation data shown "
-    "at the start of each message. Be concise, factual, and actionable. "
+    "at the start of each message. You can perform data analysis, identify trends, "
+    "compare time periods, explain detection logic, and give actionable recommendations. "
+    "Be concise, factual, and use markdown formatting (bold, lists) where helpful. "
     "Answer only in English unless the user asks otherwise."
 )
+
+_CHAT_MODEL = "claude-sonnet-4-6"
 
 
 @app.route("/api/chat", methods=["POST"])
@@ -1075,8 +1158,8 @@ def api_chat():
     try:
         client = _anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY", ""))
         resp   = client.messages.create(
-            model="claude-sonnet-4-5",
-            max_tokens=700,
+            model=_CHAT_MODEL,
+            max_tokens=1024,
             system=_CHAT_SYSTEM,
             messages=messages,
         )
@@ -1101,7 +1184,7 @@ def admin_api_summary():
     try:
         client = _anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY", ""))
         resp   = client.messages.create(
-            model="claude-sonnet-4-5",
+            model=_CHAT_MODEL,
             max_tokens=900,
             system=_CHAT_SYSTEM,
             messages=[{"role": "user", "content": prompt}],
@@ -1112,6 +1195,47 @@ def admin_api_summary():
         return jsonify(ok=False, error=str(exc)), 500
 
 
+@app.route("/admin/chatbot")
+@login_required
+def admin_chatbot():
+    """Dedicated full-page AI chat & data analysis interface."""
+    with db_connection() as conn:
+        total = conn.execute("SELECT COUNT(*) FROM violations").fetchone()[0]
+        today = conn.execute(
+            "SELECT COUNT(*) FROM violations WHERE DATE(timestamp) = DATE('now')"
+        ).fetchone()[0]
+        this_week = conn.execute(
+            "SELECT COUNT(*) FROM violations WHERE timestamp >= DATE('now','-7 days')"
+        ).fetchone()[0]
+        high_sev = conn.execute(
+            "SELECT COUNT(*) FROM violations WHERE severity='HIGH'"
+        ).fetchone()[0]
+        unique_veh = conn.execute(
+            "SELECT COUNT(DISTINCT vehicle_id) FROM violations"
+        ).fetchone()[0]
+        plate_rate_row = conn.execute(
+            "SELECT ROUND(SUM(CASE WHEN plate_number IS NOT NULL AND plate_number!='' THEN 1 ELSE 0 END)*100.0/MAX(COUNT(*),1),1) FROM violations"
+        ).fetchone()
+        plate_rate = plate_rate_row[0] if plate_rate_row and plate_rate_row[0] else 0.0
+        type_rows = conn.execute(
+            "SELECT violation_type, COUNT(*) AS cnt FROM violations GROUP BY violation_type ORDER BY cnt DESC"
+        ).fetchall()
+        recent_rows = conn.execute(
+            "SELECT timestamp, violation_type, plate_number, severity FROM violations ORDER BY timestamp DESC LIMIT 5"
+        ).fetchall()
+    det = live_proc.get_stats()
+    stats = {
+        "total": total, "today": today, "this_week": this_week,
+        "high_severity": high_sev, "unique_vehicles": unique_veh,
+        "plate_rate": plate_rate,
+        "detection_active": det.get("active", False),
+        "session_violations": det.get("session_violations", 0),
+        "types": [{"type": r["violation_type"], "count": r["cnt"]} for r in type_rows],
+        "recent": [dict(r) for r in recent_rows],
+    }
+    return render_template("admin/chatbot.html", stats=stats, model=_CHAT_MODEL)
+
+
 # ---------------------------------------------------------------------------
 # ── TEMPLATE CONTEXT ─────────────────────────────────────────────────────────
 # ---------------------------------------------------------------------------
@@ -1119,12 +1243,7 @@ def admin_api_summary():
 @app.context_processor
 def inject_global_vars():
     """Inject shared config into every template so partials can access them."""
-    return dict(
-        yandex_maps_api_key=os.getenv("YANDEX_MAPS_API_KEY", ""),
-        location_latitude=os.getenv("LOCATION_LATITUDE", "41.2963"),
-        location_longitude=os.getenv("LOCATION_LONGITUDE", "69.2798"),
-        location_name=os.getenv("LOCATION_NAME", "Crosswalk A"),
-    )
+    return _template_context()
 
 
 

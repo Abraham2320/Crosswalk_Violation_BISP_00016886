@@ -21,14 +21,25 @@ class EnforcementPipeline:
         self.repository = ViolationRepository(self.db)
         self.evidence_builder = EvidenceBuilder(settings)
         self.plate_detector = LicensePlateDetector(settings)
-        self.ocr_engine = OCREngine(settings)
+        self._ocr_engine = None  # Lazy-load OCR engine to avoid EasyOCR initialization hang
         self.report_service = LLMReportService(settings)
         self.invoice_generator = InvoiceGenerator(settings)
         self.executor = ThreadPoolExecutor(max_workers=settings.runtime.max_workers)
+    
+    @property
+    def ocr_engine(self) -> OCREngine:
+        """Lazy-load OCR engine on first access to avoid EasyOCR initialization hang."""
+        if self._ocr_engine is None:
+            self._ocr_engine = OCREngine(self.settings)
+        return self._ocr_engine
 
     def submit_violation(self, frame, event: ViolationEvent) -> Future:
+        # Pass raw frame + event to the background thread; disk I/O happens there
+        return self.executor.submit(self._process_violation, frame.copy(), event)
+
+    def _process_violation(self, frame, event: ViolationEvent) -> str:
         evidence = self.evidence_builder.capture_event(frame, event)
-        return self.executor.submit(self._process_evidence, evidence)
+        return self._process_evidence(evidence)
 
     def _process_evidence(self, evidence: EvidenceBundle) -> str:
         plate_detection = self.plate_detector.detect(evidence)
@@ -54,6 +65,8 @@ class EnforcementPipeline:
             location_code=self.settings.runtime.location_code,
             authority_name=self.settings.runtime.authority_name,
             fine_amount=fine_amount,
+            plate_crop_path=evidence.event.plate_crop_path,
+            snapshot_path=evidence.event.snapshot_path,
         )
         report_result = self.report_service.generate(report_payload)
         invoice_path = self.invoice_generator.generate(report_payload)
@@ -96,6 +109,32 @@ class EnforcementPipeline:
         }
         self.repository.save_violation(payload)
         return evidence.event.violation_id
+
+    def update_violation_plate(
+        self,
+        violation_id: str,
+        plate_number: str,
+        confidence: float,
+    ) -> None:
+        """Queue a plate-number update for a violation already saved to the DB."""
+        self.executor.submit(self._do_plate_update, violation_id, plate_number, confidence)
+
+    def _do_plate_update(
+        self,
+        violation_id: str,
+        plate_number: str,
+        confidence: float,
+    ) -> None:
+        is_real = plate_number and plate_number not in ("UNREAD", "UNREADABLE")
+        if is_real:
+            try:
+                self.repository.upsert_vehicle(plate_number)
+            except Exception:
+                pass
+        try:
+            self.repository.update_plate_number(violation_id, plate_number, confidence)
+        except Exception as exc:
+            print(f"[WARN] plate update failed for {violation_id}: {exc}")
 
     def shutdown(self) -> None:
         self.executor.shutdown(wait=False, cancel_futures=False)

@@ -41,6 +41,13 @@ _GREEN  = (0,  255,   0)    # green — default box colour
 _BLUE   = (255,  0,   0)    # blue — person in snapshot
 _WHITE  = (255, 255, 255)   # white — text labels
 _CYAN   = (0,  255, 255)    # cyan — HUD counter
+_ORANGE = (0,  165, 255)    # orange — wrong-direction box
+
+# Wrong-direction thresholds (mirror src/main.py)
+_DIRECTION_THRESHOLD   = 15    # minimum net X-pixel displacement over 8 frames
+_MIN_MOVING_SPEED_PX   = 2.0   # avg px/frame below this → vehicle is stationary
+_ROAD_Y_MIN = int(os.getenv("LIVE_ROAD_Y_MIN", "0"))
+_ROAD_Y_MAX = int(os.getenv("LIVE_ROAD_Y_MAX", "9999"))
 
 _POLYGON_PATH = Path(__file__).parent / "crosswalk_polygon.json"
 _SNAPSHOTS    = Path(__file__).parent / "static" / "snapshots"
@@ -99,6 +106,34 @@ def _speed(vt) -> Optional[float]:
     return round(sum(mags) / len(mags), 2) if mags else None
 
 
+def _compute_vehicle_direction(vt) -> str:
+    """Return 'FORWARD', 'REVERSE', or 'STATIONARY' from the last 8 centroid positions."""
+    positions = list(vt.centroid_history)
+    if len(positions) < 8:
+        return "STATIONARY"
+    recent = positions[-8:]
+    dx = recent[-1][0] - recent[0][0]
+    avg_x_motion = sum(
+        abs(recent[i + 1][0] - recent[i][0]) for i in range(len(recent) - 1)
+    ) / (len(recent) - 1)
+    if avg_x_motion < 5.0:
+        return "STATIONARY"
+    if dx < -_DIRECTION_THRESHOLD:
+        return "REVERSE"
+    if dx > _DIRECTION_THRESHOLD:
+        return "FORWARD"
+    return "STATIONARY"
+
+
+def _vehicle_speed(vt) -> float:
+    """Return average speed (px/frame) over the last 8 velocity samples."""
+    h = list(vt.velocity_history)
+    if not h:
+        return 0.0
+    recent = h[-8:]
+    return sum((dx ** 2 + dy ** 2) ** 0.5 for dx, dy in recent) / len(recent)
+
+
 def _intersects_box(box, polygon_4: np.ndarray, min_ratio: float = 0.02) -> bool:
     """Convex polygon ∩ bounding-box overlap check (uses first 4 polygon points)."""
     x1, y1, x2, y2 = map(int, box)
@@ -147,8 +182,14 @@ class LiveProcessor:
         self._split_ratio = 0.32
         self._show_split_overlay = True
         self._stabilizer = None
-        self._stabilizer_enabled = os.getenv("LIVE_ENABLE_STABILIZATION", "1") != "0"
+        self._stabilizer_enabled = os.getenv("LIVE_ENABLE_STABILIZATION", "0") != "0"
         self._stabilizer_initialized = False
+        self._enable_plate_detector = os.getenv("LIVE_ENABLE_PLATE_DETECTOR", "1") != "0"
+        self._enable_ocr            = os.getenv("LIVE_ENABLE_OCR", "1") != "0"
+        self._enable_wrong_dir      = os.getenv("LIVE_ENABLE_WRONG_DIR", "1") != "0"
+
+        # ── Clean frame (captured before any overlays, used for plate crops) ───
+        self._clean_frame: Optional[np.ndarray] = None
 
         # ── Plate detection ───────────────────────────────────────────────────
         self._plate_detector = None
@@ -156,6 +197,9 @@ class LiveProcessor:
         self._ocr_engine    = None
         self._plate_text_cache:  Dict[int, str] = {}   # obj_id -> detected plate text
         self._plate_ocr_pending: Set[int] = set()       # obj_ids currently being OCR'd
+
+        # ── Wrong-direction tracking ──────────────────────────────────────────
+        self._wrong_dir_flagged: Set[int] = set()
 
         # ── Tracking state ────────────────────────────────────────────────────
         self._ped_tracks:         Dict = {}
@@ -310,8 +354,11 @@ class LiveProcessor:
                 "ocr_rejected":       self.ocr_rejected,
                 "ocr_pending":        len(self._plate_ocr_pending),
                 "plate_cached":       len(self._plate_text_cache),
-                "violations_submitted": self.violations_submitted,
-                "last_error":         self.last_error,
+                "violations_submitted":   self.violations_submitted,
+                "last_error":            self.last_error,
+                "enable_plate_detector": self._enable_plate_detector,
+                "enable_ocr":            self._enable_ocr,
+                "enable_wrong_dir":      self._enable_wrong_dir,
             }
 
     def reset_session_outputs(self) -> None:
@@ -349,6 +396,10 @@ class LiveProcessor:
     # ── Internals ──────────────────────────────────────────────────────────────
 
     def _load_components(self) -> None:
+        if self._detector is not None and self._pipeline is not None and self._id_merger is not None:
+            self.reload_polygon()
+            return
+
         from config import settings as cfg
         from detector.yolo_detector import YOLODetector
         from detector.tracker import IDMerger
@@ -374,29 +425,40 @@ class LiveProcessor:
         self._id_merger = IDMerger(proximity_px=40.0, min_frames=3)
 
         # ── Plate detector (uses custom YOLO model or Haar fallback) ──────────
-        try:
-            from alpr.detector import LicensePlateDetector
-            self._plate_detector = LicensePlateDetector(cfg)
-            model_type = "custom YOLO" if self._plate_detector._detector is not None else "Haar cascade"
-            self._plate_model_mode = model_type
-            print(f"[LiveProcessor:{self._cam_id}] Plate detector ready ({model_type})")
-        except Exception as exc:
-            print(f"[LiveProcessor:{self._cam_id}] Plate detector unavailable: {exc}")
-            self._plate_detector = None
-            self._plate_model_mode = "unavailable"
+        if self._enable_plate_detector:
+            try:
+                from alpr.detector import LicensePlateDetector
+                self._plate_detector = LicensePlateDetector(cfg)
+                model_type = "custom YOLO" if self._plate_detector._detector is not None else "Haar cascade"
+                self._plate_model_mode = model_type
+                print(f"[LiveProcessor:{self._cam_id}] Plate detector ready ({model_type})")
+            except Exception as exc:
+                print(f"[LiveProcessor:{self._cam_id}] Plate detector unavailable: {exc}")
+                self._plate_detector = None
+                self._plate_model_mode = "unavailable"
+        else:
+            self._plate_detector  = None
+            self._plate_model_mode = "disabled"
+            print(f"[LiveProcessor:{self._cam_id}] Plate detector disabled (LIVE_ENABLE_PLATE_DETECTOR=0)")
 
         # ── OCR engine ────────────────────────────────────────────────────────
-        try:
-            from OCR.engine import OCREngine
-            self._ocr_engine = OCREngine(cfg)
-            self._ocr_backend = cfg.models.ocr_backend
-            self._ocr_gpu_enabled = os.getenv("OCR_USE_GPU", "1") != "0"
-            print(f"[LiveProcessor:{self._cam_id}] OCR engine ready ({cfg.models.ocr_backend})")
-        except Exception as exc:
-            print(f"[LiveProcessor:{self._cam_id}] OCR engine unavailable: {exc}")
+        if self._enable_ocr:
+            try:
+                from OCR.engine import OCREngine
+                self._ocr_engine = OCREngine(cfg)
+                self._ocr_backend = cfg.models.ocr_backend
+                self._ocr_gpu_enabled = os.getenv("OCR_USE_GPU", "1") != "0"
+                print(f"[LiveProcessor:{self._cam_id}] OCR engine ready ({cfg.models.ocr_backend})")
+            except Exception as exc:
+                print(f"[LiveProcessor:{self._cam_id}] OCR engine unavailable: {exc}")
+                self._ocr_engine = None
+                self._ocr_backend = "none"
+                self._ocr_gpu_enabled = False
+        else:
             self._ocr_engine = None
-            self._ocr_backend = "none"
+            self._ocr_backend = "disabled"
             self._ocr_gpu_enabled = False
+            print(f"[LiveProcessor:{self._cam_id}] OCR disabled (LIVE_ENABLE_OCR=0)")
         self._split_ratio = cfg.runtime.split_ratio
         self._show_split_overlay = cfg.runtime.show_split_overlay
         self._stabilizer = VideoStabilizer() if self._stabilizer_enabled else None
@@ -413,6 +475,7 @@ class LiveProcessor:
         self._plate_bbox_cache.clear()
         self._plate_text_cache.clear()
         self._plate_ocr_pending.clear()
+        self._wrong_dir_flagged.clear()
         self._frame_index = 0
         self.ped_total = self.veh_total = 0
         self.ped_in_zone = self.veh_in_zone = 0
@@ -522,6 +585,9 @@ class LiveProcessor:
         self.last_detect_ms = detect_ms if run_detect else 0.0
         if run_detect:
             self.avg_detect_ms = self._ema(self.avg_detect_ms, detect_ms)
+
+        # Capture clean copy before any drawing so plate crops have no text overlays
+        self._clean_frame = frame.copy()
 
         # ── Draw polygon zone overlay (AFTER detection, same order as main.py) ─
         if polygon is not None and crosswalk is not None:
@@ -650,6 +716,7 @@ class LiveProcessor:
                 self._plate_bbox_cache.pop(gone_id, None)
                 self._plate_text_cache.pop(gone_id, None)
                 self._plate_ocr_pending.discard(gone_id)
+                self._wrong_dir_flagged.discard(gone_id)
                 del self._veh_tracks[gone_id]
 
         # ── Second pass: violation checks + drawing — mirrors main.py ─────────
@@ -665,6 +732,7 @@ class LiveProcessor:
                     vt is not None
                     and vt.polygon_entry_frame is not None
                     and (self._frame_index - vt.polygon_entry_frame) <= ENTRY_EVAL_WINDOW_FRAMES
+                    and _vehicle_speed(vt) >= _MIN_MOVING_SPEED_PX
                 ):
                     for ped_id, pt in self._ped_tracks.items():
                         pair = (obj_id, ped_id)
@@ -689,9 +757,35 @@ class LiveProcessor:
                                 all_boxes=boxes, all_classes=classes,
                             )
 
+            # ── Wrong-direction detection ─────────────────────────────────────
+            if (
+                cls != 0
+                and self._enable_wrong_dir
+                and vt is not None
+                and len(vt.centroid_history) >= 8
+                and obj_id not in self._wrong_dir_flagged
+                and _ROAD_Y_MIN <= cy <= _ROAD_Y_MAX
+                and _vehicle_speed(vt) >= _MIN_MOVING_SPEED_PX
+            ):
+                if _compute_vehicle_direction(vt) == "REVERSE":
+                    self._wrong_dir_flagged.add(obj_id)
+                    with self._lock:
+                        self.session_violations += 1
+                        self._violation_until = time.monotonic() + 5.0
+                    import types as _types
+                    wd_viol = _types.SimpleNamespace(
+                        violation_type="WRONG_DIRECTION", severity="HIGH"
+                    )
+                    wd_ped = _types.SimpleNamespace(velocity_history=[])
+                    self._submit_violation(
+                        frame, box, np_poly, vt, wd_ped, wd_viol,
+                        all_boxes=boxes, all_classes=classes,
+                    )
+
             # ── Draw box — same color scheme as main.py ───────────────────────
-            obj_class       = "person" if cls == 0 else "vehicle"
+            obj_class        = "person" if cls == 0 else "vehicle"
             violation_active = cls != 0 and obj_id in self._active_viol_cars
+            is_wrong_dir     = cls != 0 and obj_id in self._wrong_dir_flagged
 
             if cls == 0:  # pedestrian: state-based colour
                 pt_draw = self._ped_tracks.get(obj_id)
@@ -703,7 +797,8 @@ class LiveProcessor:
                 )
             else:  # vehicle
                 box_color = (
-                    _RED    if violation_active
+                    _ORANGE if is_wrong_dir
+                    else _RED    if violation_active
                     else _YELLOW if obj_id in self._vehicles_in_polygon
                     else _GREEN
                 )
@@ -712,27 +807,34 @@ class LiveProcessor:
             if cls == 0:
                 pt = self._ped_tracks.get(obj_id)
                 if pt:
-                    cv2.putText(
-                        frame, pt.state, (cx, cy + 18),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, _WHITE, 1,
-                    )
+                    (tw, th), _ = cv2.getTextSize(pt.state, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
+                    tx = max(0, int(x2) - tw)
+                    ty = max(th + 2, int(y1) - 4)
+                    cv2.putText(frame, pt.state, (tx, ty),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, _WHITE, 1)
                     direction = _ped_direction(pt.velocity_history)
                     if direction != "STATIC":
                         cv2.putText(
-                            frame, direction, (cx, cy - 40),
+                            frame, direction, (int(x1), int(y1) - 20),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2,
                         )
             else:
                 vt = self._veh_tracks.get(obj_id)
                 state_label = "INSIDE" if (vt and vt.polygon_entry_frame is not None) else "OUTSIDE"
-                cv2.putText(
-                    frame, state_label, (cx, cy + 18),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, _WHITE, 1,
-                )
+                (tw, th), _ = cv2.getTextSize(state_label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
+                tx = max(0, int(x2) - tw)
+                ty = max(th + 2, int(y1) - 4)
+                cv2.putText(frame, state_label, (tx, ty),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, _WHITE, 1)
                 if violation_active:
                     cv2.putText(
                         frame, "VIOLATION", (cx, cy - 25),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.9, _RED, 2,
+                    )
+                if is_wrong_dir:
+                    cv2.putText(
+                        frame, "<- WRONG DIR", (int(x1), int(y1) - 10),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, _ORANGE, 2,
                     )
 
                 # ── Plate detection + OCR overlay ─────────────────────────────
@@ -742,7 +844,9 @@ class LiveProcessor:
                     x2c = min(w - 1, x2i); y2c = min(h - 1, y2i)
                     if (x2c - x1c) >= 32 and (y2c - y1c) >= 32:
                         try:
-                            crop = frame[y1c:y2c, x1c:x2c]
+                            # Use clean frame so plate detector / OCR see unobscured pixels
+                            _clean = self._clean_frame if self._clean_frame is not None else frame
+                            crop = _clean[y1c:y2c, x1c:x2c]
                             pbbox, _pconf = self._plate_detector._best_box(crop)
                             if pbbox is not None:
                                 px1, py1, px2, py2 = pbbox
@@ -762,7 +866,7 @@ class LiveProcessor:
                                     ppx2o = min(w - 1, int(x1c + px2))
                                     ppy2o = min(h - 1, int(y1c + py2))
                                     if ppx2o - ppx1o > 8 and ppy2o - ppy1o > 8:
-                                        plate_crop_img = frame[ppy1o:ppy2o, ppx1o:ppx2o].copy()
+                                        plate_crop_img = _clean[ppy1o:ppy2o, ppx1o:ppx2o].copy()
                                         self._plate_ocr_pending.add(obj_id)
                                         import threading as _t
                                         _t.Thread(
@@ -830,7 +934,8 @@ class LiveProcessor:
             else:
                 viol = obj_id in self._active_viol_cars
                 zone = obj_id in self._vehicles_in_polygon
-                color = _RED if viol else _YELLOW if zone else _GREEN
+                wd   = obj_id in self._wrong_dir_flagged
+                color = _ORANGE if wd else _RED if viol else _YELLOW if zone else _GREEN
             draw_box(frame, box, obj_class, color)
             # Plate overlay from cache on skipped frames
             if cls != 0:
@@ -850,16 +955,9 @@ class LiveProcessor:
 
     def _run_ocr_for_vehicle(self, obj_id: int, plate_crop: np.ndarray) -> None:
         """Run OCR on plate crop in a background thread; cache result in _plate_text_cache."""
-        import tempfile
-        import os as _os
-        tmp_path = None
         t0 = time.perf_counter()
         try:
-            tmp = tempfile.NamedTemporaryFile(suffix=".jpg", delete=False)
-            cv2.imwrite(tmp.name, plate_crop)
-            tmp.close()
-            tmp_path = tmp.name
-            result = self._ocr_engine.recognize(tmp_path)
+            result = self._ocr_engine.recognize_array(plate_crop)
             self.ocr_attempts += 1
             if result.plate_text:
                 self._plate_text_cache[obj_id] = result.plate_text
@@ -876,11 +974,6 @@ class LiveProcessor:
             self.last_ocr_ms = ocr_ms
             self.avg_ocr_ms = self._ema(self.avg_ocr_ms, ocr_ms)
             self._plate_ocr_pending.discard(obj_id)
-            if tmp_path:
-                try:
-                    _os.unlink(tmp_path)
-                except Exception:
-                    pass
 
     def _submit_violation(self, frame, vbox, np_poly, vt, pt, violation,
                             all_boxes=None, all_classes=None) -> None:
@@ -957,16 +1050,18 @@ class LiveProcessor:
             cv2.imwrite(str(_SNAPSHOTS / fname), snap)
             event.snapshot_path = f"snapshots/{fname}"
 
-            # Save plate crop if we have a cached detection for this vehicle
+            # Save plate crop from the clean (pre-annotation) frame to avoid
+            # capturing state-label text that is drawn over the vehicle bbox.
             plate_bbox_frame = self._plate_bbox_cache.get(vt.track_id)
             if plate_bbox_frame is not None:
                 try:
-                    fh_f, fw_f = frame.shape[:2]
+                    src = self._clean_frame if self._clean_frame is not None else frame
+                    fh_f, fw_f = src.shape[:2]
                     ppx1, ppy1, ppx2, ppy2 = plate_bbox_frame
                     ppx1 = max(0, ppx1); ppy1 = max(0, ppy1)
                     ppx2 = min(fw_f - 1, ppx2); ppy2 = min(fh_f - 1, ppy2)
                     if ppx2 > ppx1 and ppy2 > ppy1:
-                        plate_crop = frame[ppy1:ppy2, ppx1:ppx2]
+                        plate_crop = src[ppy1:ppy2, ppx1:ppx2]
                         plate_fname = f"plate_{event.violation_id}.jpg"
                         cv2.imwrite(str(_SNAPSHOTS / plate_fname), plate_crop)
                         event.plate_crop_path = f"snapshots/{plate_fname}"

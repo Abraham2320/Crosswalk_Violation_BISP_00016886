@@ -25,7 +25,7 @@ def _env_path(name: str, default: Path) -> Path:
 
 @dataclass(slots=True)
 class ModelSettings:
-    detection_model_path: str = os.getenv("DETECTION_MODEL_PATH", "yolov8n.pt")
+    detection_model_path: str = os.getenv("DETECTION_MODEL_PATH", "yolov8l.pt")
     license_plate_model_path: str = os.getenv("PLATE_MODEL_PATH", "models/license_plate.pt")
     detection_classes: List[int] = field(default_factory=lambda: [0, 2, 3, 5, 7])
     plate_classes: List[int] = field(default_factory=list)
@@ -33,10 +33,11 @@ class ModelSettings:
     plate_confidence: float = float(os.getenv("PLATE_CONFIDENCE", "0.25"))
     image_size: int = int(os.getenv("IMAGE_SIZE", "960"))
     ocr_backend: str = os.getenv("OCR_BACKEND", "easyocr")
-    ocr_confidence_threshold: float = float(os.getenv("OCR_CONFIDENCE_THRESHOLD", "0.35"))
+    ocr_confidence_threshold: float = float(os.getenv("OCR_CONFIDENCE_THRESHOLD", "0.40"))
     plate_regex: str = os.getenv("PLATE_REGEX", r"^[A-Z0-9]{5,10}$")
     llm_provider: str = os.getenv("LLM_PROVIDER", "mock")
-    openai_model: str = os.getenv("OPENAI_MODEL", "gpt-5.4-mini")
+    anthropic_model: str = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-6")
+    anthropic_api_key: str = os.getenv("ANTHROPIC_API_KEY", "")
 
 
 @dataclass(slots=True)
@@ -47,7 +48,7 @@ class RuntimeSettings:
     pedestrian_direction_threshold: int = int(
         os.getenv("PEDESTRIAN_DIRECTION_THRESHOLD", "3")
     )
-    split_ratio: float = float(os.getenv("CROSSWALK_SPLIT_RATIO", "0.32"))
+    split_ratio: float = float(os.getenv("CROSSWALK_SPLIT_RATIO", "0.12"))
     show_split_overlay: bool = os.getenv("SHOW_SPLIT_OVERLAY", "1") != "0"
     target_fps: int = int(os.getenv("TARGET_FPS", "15"))
     location_name: str = os.getenv("LOCATION_NAME", "Crosswalk A")
@@ -57,22 +58,13 @@ class RuntimeSettings:
     ocr_workers: int = int(os.getenv("OCR_WORKERS", "1"))
     location_code: str = os.getenv("LOCATION_CODE", "CW-A-01")
 
-    # ── Camera source for live streaming (used by stream.py + app.py) ────────
-    # Set to webcam index (0, 1, 2…) or a full RTSP/HTTP URL:
-    #   CAMERA_SOURCE=0                              # first USB/built-in webcam
-    #   CAMERA_SOURCE=rtsp://admin:pass@192.168.1.64:554/stream1
-    #   CAMERA_SOURCE=http://192.168.1.100:8080/video
+    # Camera input for live detection (webcam index or RTSP/HTTP stream URL).
     camera_source: str = os.getenv("CAMERA_SOURCE", "0")
 
-    # ── Yandex Maps API key (used in admin invoices + violation detail) ───────
-    # Get your key at: https://developer.tech.yandex.com/services/
-    # Then add to your .env file:  YANDEX_MAPS_API_KEY=<your_key>
+    # API key used to render map widgets in violation and invoice views.
     yandex_maps_api_key: str = os.getenv("YANDEX_MAPS_API_KEY", "")
 
-    # ── Location GPS coordinates (set per crosswalk camera) ──────────────────
-    # Used to pin violations on the map.  Tashkent examples:
-    #   41.2963,69.2798  → Amir Temur Ave crosswalk
-    #   41.2959,69.2697  → Navoi Street crosswalk
+    # Default coordinates used for map pinning when saving violations.
     location_latitude:  float = float(os.getenv("LOCATION_LATITUDE",  "41.2963"))
     location_longitude: float = float(os.getenv("LOCATION_LONGITUDE", "69.2798"))
 

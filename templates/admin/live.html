@@ -468,7 +468,7 @@
           <span class="overlay-badge detecting" id="det-badge" style="display:none;">
             <span style="width:6px;height:6px;border-radius:50%;background:var(--accent-amber);
                          animation:alertFlash 1.5s infinite;"></span>
-            <span>{{ t('live.detecting') }}</span>
+            <span id="det-badge-text">{{ t('live.detecting') }}</span>
           </span>
           <span class="overlay-badge" style="color:var(--text-muted); {% if not camera_status.source %}display:none;{% endif %}"
                 id="source-badge">
@@ -671,6 +671,7 @@ const I18N = {
   noViolationsYet: {{ t('live.no_violations_yet')|tojson }},
   undetected: {{ t('live.undetected')|tojson }},
   viewShort: {{ t('live.view_short')|tojson }},
+  detecting: {{ t('live.detecting')|tojson }},
   connectBtn: {{ t('live.connect')|tojson }}
 };
 
@@ -806,8 +807,7 @@ async function enterEditMode() {
   } catch(_) {}
 
   editMode = true;
-  // Start a fresh polygon so stale/invalid saved points do not anchor to corners.
-  polygonPoints = [];
+  // Keep existing polygon points so operators can adjust instead of redrawing from scratch.
   _frozenFrame = null;
   // Restore opacity — detection mode sets canvas opacity:0
   canvas.style.opacity = "1";
@@ -866,8 +866,8 @@ function exitEditMode() {
   editMode = false;
   releaseFrame();
   canvas.classList.remove("edit-mode");
-  // If detection is active, hide canvas again (OpenCV draws overlays on the stream)
-  if (detectionActive) canvas.style.opacity = "0";
+  // Keep overlay visible so users can always see the configured zone.
+  if (detectionActive) canvas.style.opacity = "1";
   document.getElementById("poly-panel").style.display = "none";
   document.getElementById("btn-poly-edit").style.display   = "";
   document.getElementById("btn-poly-save").style.display   = "none";
@@ -1021,8 +1021,8 @@ async function startDetection() {
       if (d.starting && !d.active) {
         showToast(I18N.warmupModel, 4500);
       }
-      if (d.active && !editMode) {
-        canvas.style.opacity = "0";
+      if (!editMode) {
+        canvas.style.opacity = "1";
       }
       if (!d.polygon_loaded) {
         showToast(`⚠ ${I18N.noPolygonAccuracy}`, 6000);
@@ -1050,6 +1050,8 @@ function setDetectionUI(active) {
   document.getElementById("btn-det-start").style.display = active ? "none" : "";
   document.getElementById("btn-det-stop").style.display  = active ? "" : "none";
   document.getElementById("det-badge").style.display     = active ? "" : "none";
+  const detText = document.getElementById("det-badge-text");
+  if (detText) detText.textContent = I18N.detecting;
   document.getElementById("det-stats-wrap").style.display = active ? "" : "none";
   // Video border glow when detecting
   const wrap = document.getElementById("video-wrap");
@@ -1070,7 +1072,8 @@ function setDetectionUI(active) {
   }
 
   if (active) {
-    // Canvas stays visible during warmup — pollDetectionStatus hides it when model is live
+    // Canvas stays visible during warmup and after model starts.
+    if (!editMode) canvas.style.opacity = "1";
     if (!_detPollInterval) {
       _detPollInterval = setInterval(pollDetectionStatus, 800);
     }
@@ -1089,6 +1092,10 @@ async function pollDetectionStatus() {
   try {
     const r = await fetch("{{ url_for('admin_live_detection_status') }}");
     const d = await r.json();
+    const detText = document.getElementById("det-badge-text");
+    if (detText) {
+      detText.textContent = d.active ? I18N.detecting : (d.starting ? I18N.starting : I18N.detecting);
+    }
     document.getElementById("ds-ped").textContent       = d.ped_total;
     document.getElementById("ds-veh").textContent       = d.veh_total;
     document.getElementById("ds-ped-zone").textContent  = d.ped_in_zone;
@@ -1101,10 +1108,9 @@ async function pollDetectionStatus() {
       document.getElementById("violation-alert").classList.remove("visible");
     }
 
-    // Once the model is fully loaded and processing, OpenCV draws the polygon on frames.
-    // Hide the JS canvas overlay at that point to avoid double-drawing.
-    if (d.active && detectionActive && !editMode && canvas.style.opacity !== "0") {
-      canvas.style.opacity = "0";
+    // Keep polygon overlay visible while active to avoid looking like it was cleared.
+    if (detectionActive && !editMode && canvas.style.opacity !== "1") {
+      canvas.style.opacity = "1";
     }
 
     // Sync UI if detection stopped from another source (e.g. error or stop button on another tab)

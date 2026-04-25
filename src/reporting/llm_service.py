@@ -12,11 +12,11 @@ class LLMReportService:
     def __init__(self, settings: AppSettings):
         self.settings = settings
         self._client = None
-        if settings.models.llm_provider.lower() == "openai":
+        if settings.models.llm_provider.lower() == "anthropic":
             try:
-                from openai import OpenAI  # type: ignore
-
-                self._client = OpenAI()
+                import anthropic  # type: ignore
+                api_key = settings.models.anthropic_api_key or None
+                self._client = anthropic.Anthropic(api_key=api_key)
             except Exception:
                 self._client = None
 
@@ -25,28 +25,32 @@ class LLMReportService:
             "Generate a formal traffic violation package in JSON with keys "
             "`report`, `legal_explanation`, `fine_amount`, `payment_instructions`, `violation_summary`. "
             "Write in a legal-administrative tone suitable for a municipal enforcement record. "
+            "Return ONLY valid JSON — no markdown, no code fences. "
             f"Input: {json.dumps(asdict(payload), ensure_ascii=True)}"
         )
 
     def generate(self, payload: ReportPayload) -> ReportResult:
         if self._client is not None:
-            prompt = self.build_prompt(payload)
-            response = self._client.responses.create(
-                model=self.settings.models.openai_model,
-                input=prompt,
-            )
-            text = getattr(response, "output_text", "").strip()
             try:
-                structured = json.loads(text)
-            except json.JSONDecodeError:
-                structured = {
-                    "report": text,
-                    "legal_explanation": text,
-                    "fine_amount": payload.fine_amount,
-                    "payment_instructions": "Refer to the issuing authority.",
-                    "violation_summary": text,
-                }
-            return ReportResult(report_json=structured, report_text=text)
+                message = self._client.messages.create(
+                    model=self.settings.models.anthropic_model,
+                    max_tokens=1024,
+                    messages=[{"role": "user", "content": self.build_prompt(payload)}],
+                )
+                text = message.content[0].text.strip()
+                try:
+                    structured = json.loads(text)
+                except json.JSONDecodeError:
+                    structured = {
+                        "report": text,
+                        "legal_explanation": text,
+                        "fine_amount": payload.fine_amount,
+                        "payment_instructions": "Refer to the issuing authority.",
+                        "violation_summary": text,
+                    }
+                return ReportResult(report_json=structured, report_text=text)
+            except Exception:
+                pass  # fall through to mock on any API error
 
         structured = self._mock_response(payload)
         return ReportResult(report_json=structured, report_text=structured["report"])

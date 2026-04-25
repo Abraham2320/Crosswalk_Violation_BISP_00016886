@@ -180,6 +180,7 @@ class PedestrianTrack:
     midline_crossed_frame: Optional[int] = None
     exit_frame: Optional[int] = None
     frames_outside_count: int = 0   # consecutive frames centroid was outside polygon
+    state_since_frame: Optional[int] = None  # frame when the current state was entered
     centroid: Optional[Tuple[float, float]] = None
     prev_centroid: Optional[Tuple[float, float]] = None
     velocity_history: deque = field(default_factory=lambda: deque(maxlen=10))

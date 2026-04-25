@@ -134,6 +134,8 @@ class ReportPayload:
     location_code: str
     authority_name: str
     fine_amount: float
+    plate_crop_path: Optional[str] = None
+    snapshot_path: Optional[str] = None
 
 
 @dataclass(slots=True)

@@ -758,7 +758,8 @@ python run_system.py --video Videos/v2.mp4
 **Optional flags:**
 ```bash
 python run_system.py --video path/to/file.mp4  # override video path
-python run_system.py --no-stabilize            # disable ORB stabilisation
+python run_system.py                           # raw frames, stabilisation off by default
+python run_system.py --stabilize              # enable ORB stabilisation explicitly
 python run_system.py --chatbot                 # launch AI chatbot instead
 ```
 

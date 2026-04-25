@@ -330,7 +330,7 @@ def seed(n: int = 100) -> None:
     conn.close()
 
     total = _count()
-    print(f"\nDone. Inserted {inserted} violations → database now has {total} records.")
+    print(f"\nDone. Inserted {inserted} violations -> database now has {total} records.")
     print(f"Snapshots: {SNAPSHOTS_DIR}")
     print(f"Database:  {DB_PATH}")
     print("\nSample plates you can search in the portal:")

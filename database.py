@@ -5,6 +5,7 @@ admin_users, and audit_log tables, and seeds the default admin account.
 """
 from __future__ import annotations
 
+import os
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
@@ -13,7 +14,22 @@ from typing import Iterator
 from werkzeug.security import generate_password_hash
 
 PROJECT_ROOT = Path(__file__).resolve().parent
-DB_PATH = PROJECT_ROOT / "crosswalk_violations.db"
+
+
+def _resolve_db_path() -> Path:
+    explicit_path = os.getenv("DB_PATH", "").strip()
+    if explicit_path:
+        return Path(explicit_path)
+
+    for env_name in ("DATABASE_URL", "SQLITE_FALLBACK_URL"):
+        raw_url = os.getenv(env_name, "").strip()
+        if raw_url.startswith("sqlite:///"):
+            return Path(raw_url.replace("sqlite:///", "", 1))
+
+    return PROJECT_ROOT / "crosswalk_violations.db"
+
+
+DB_PATH = _resolve_db_path()
 
 
 # ---------------------------------------------------------------------------
@@ -22,6 +38,7 @@ DB_PATH = PROJECT_ROOT / "crosswalk_violations.db"
 
 @contextmanager
 def db_connection() -> Iterator[sqlite3.Connection]:
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
@@ -47,6 +64,57 @@ def _existing_columns(conn: sqlite3.Connection, table: str) -> set:
 def init_db() -> None:
     """Idempotent migration: adds new columns and tables, seeds default admin."""
     with db_connection() as conn:
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS vehicles (
+                id TEXT PRIMARY KEY,
+                plate_number TEXT UNIQUE NOT NULL,
+                owner_name TEXT,
+                violations_count INTEGER NOT NULL DEFAULT 0
+            );
+
+            CREATE TABLE IF NOT EXISTS violations (
+                id TEXT PRIMARY KEY,
+                timestamp TEXT NOT NULL,
+                plate_number TEXT,
+                vehicle_id INTEGER NOT NULL,
+                vehicle_image_path TEXT NOT NULL DEFAULT '',
+                frame_image_path TEXT NOT NULL DEFAULT '',
+                plate_image_path TEXT,
+                report_path TEXT,
+                invoice_path TEXT,
+                violation_type TEXT NOT NULL DEFAULT 'UNKNOWN',
+                severity TEXT NOT NULL DEFAULT 'HIGH',
+                pedestrian_direction TEXT NOT NULL DEFAULT 'STATIC',
+                confidence REAL NOT NULL DEFAULT 0,
+                status TEXT NOT NULL DEFAULT 'pending',
+                location TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                llm_report_json TEXT,
+                llm_report_text TEXT,
+                vehicle_ref_id TEXT,
+                snapshot_path TEXT,
+                location_name TEXT,
+                vehicle_speed_estimate REAL,
+                latitude REAL,
+                longitude REAL,
+                location_address TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS invoices (
+                id TEXT PRIMARY KEY,
+                violation_id TEXT UNIQUE NOT NULL,
+                amount REAL NOT NULL,
+                issued_at TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'issued',
+                pdf_path TEXT NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS ix_violations_plate_number ON violations (plate_number);
+            CREATE INDEX IF NOT EXISTS ix_violations_plate_timestamp ON violations (plate_number, timestamp);
+            """
+        )
+
         # ── violations: add new columns safely ───────────────────────────────
         cols = _existing_columns(conn, "violations")
         for col, col_type in {

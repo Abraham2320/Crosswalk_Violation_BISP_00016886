@@ -19,13 +19,16 @@ class VideoStabilizer:
     stabilisation state.
     """
 
-    MIN_INLIERS = 12         # minimum RANSAC inliers to accept a homography
-    MAX_FEATURES = 1000      # ORB features per frame
-    MATCH_RATIO = 0.75       # Lowe ratio-test threshold
+    MIN_INLIERS = 12              # minimum RANSAC inliers to accept a homography
+    MAX_FEATURES = 1000           # ORB features per frame
+    MATCH_RATIO = 0.75            # Lowe ratio-test threshold
     MAX_TRANSLATION_FRAC = 0.35   # reject shifts larger than 35% of frame
     MIN_SCALE = 0.75              # reject extreme zoom-out
     MAX_SCALE = 1.35              # reject extreme zoom-in
     MAX_PERSPECTIVE_TERM = 0.0025 # reject strong projective skew
+    STABLE_ALPHA = 0.25           # low-pass filter weight for homography smoothing
+    REF_TOP_FRAC = 0.58           # use mostly-static upper scene for keypoints
+    MAX_FALLBACK_FRAMES = 8       # reuse last valid transform for short dropouts
 
     def __init__(self) -> None:
         self._orb = cv2.ORB_create(nfeatures=self.MAX_FEATURES)
@@ -37,6 +40,8 @@ class VideoStabilizer:
 
         # last valid inverse homography (identity until a good one is found)
         self._last_H_inv: np.ndarray = np.eye(3, dtype=np.float64)
+        self._has_valid_transform: bool = False
+        self._fallback_frames: int = 0
         self._stable: bool = True
 
     # ------------------------------------------------------------------
@@ -46,7 +51,8 @@ class VideoStabilizer:
     def init_reference(self, frame: np.ndarray) -> None:
         """Call exactly once on frame 0 before entering the main loop."""
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        self._ref_kp, self._ref_desc = self._orb.detectAndCompute(gray, None)
+        ref_mask = self._build_feature_mask(gray.shape[0], gray.shape[1])
+        self._ref_kp, self._ref_desc = self._orb.detectAndCompute(gray, ref_mask)
         self._ref_shape = gray.shape  # (h, w)
 
     def stabilize(self, frame: np.ndarray) -> np.ndarray:
@@ -60,15 +66,28 @@ class VideoStabilizer:
 
         h, w = frame.shape[:2]
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        kp, desc = self._orb.detectAndCompute(gray, None)
+        feature_mask = self._build_feature_mask(h, w)
+        kp, desc = self._orb.detectAndCompute(gray, feature_mask)
 
         H_inv = self._estimate_inverse_homography(kp, desc)
 
         if H_inv is not None:
-            self._last_H_inv = H_inv
+            self._last_H_inv = self._smooth_homography(H_inv)
+            self._has_valid_transform = True
+            self._fallback_frames = 0
             self._stable = True
         else:
             self._stable = False
+
+        if H_inv is None and self._has_valid_transform and self._fallback_frames < self.MAX_FALLBACK_FRAMES:
+            self._fallback_frames += 1
+            stabilised = cv2.warpPerspective(
+                frame, self._last_H_inv, (w, h),
+                flags=cv2.INTER_LINEAR,
+                borderMode=cv2.BORDER_REPLICATE,
+            )
+            self._draw_status(stabilised)
+            return stabilised
 
         # Fail-open behavior: if homography is unstable, show the original frame
         # instead of warping with a stale transform (prevents "angled/black" output).
@@ -155,6 +174,37 @@ class VideoStabilizer:
             return False
 
         return True
+
+    def _smooth_homography(self, H_inv: np.ndarray) -> np.ndarray:
+        """Apply lightweight temporal smoothing to reduce per-frame warp jitter."""
+        if abs(H_inv[2, 2]) < 1e-9:
+            return self._last_H_inv
+
+        current = H_inv / H_inv[2, 2]
+        if not self._has_valid_transform:
+            return current
+
+        prev = self._last_H_inv
+        if abs(prev[2, 2]) < 1e-9:
+            prev = np.eye(3, dtype=np.float64)
+        else:
+            prev = prev / prev[2, 2]
+
+        blended = (1.0 - self.STABLE_ALPHA) * prev + self.STABLE_ALPHA * current
+        if abs(blended[2, 2]) < 1e-9:
+            blended[2, 2] = 1.0
+        blended = blended / blended[2, 2]
+
+        if self._is_homography_sane(blended):
+            return blended
+        return current
+
+    def _build_feature_mask(self, h: int, w: int) -> np.ndarray:
+        """Bias keypoints toward static background and away from moving road traffic."""
+        mask = np.zeros((h, w), dtype=np.uint8)
+        top_h = max(1, int(h * self.REF_TOP_FRAC))
+        mask[:top_h, :] = 255
+        return mask
 
     @staticmethod
     def _draw_status(frame: np.ndarray) -> None:

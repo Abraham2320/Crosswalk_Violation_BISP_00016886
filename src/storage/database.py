@@ -71,6 +71,7 @@ if SQLALCHEMY_AVAILABLE:
         vehicle_speed_estimate: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
         snapshot_path: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
         location_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+        plate_crop_path: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
         vehicle: Mapped[Optional[VehicleRecord]] = relationship(back_populates="violations")
         invoice: Mapped[Optional["InvoiceRecord"]] = relationship(back_populates="violation", uselist=False)
@@ -108,7 +109,10 @@ if SQLALCHEMY_AVAILABLE:
             connect_args = {}
             if url.startswith("sqlite"):
                 connect_args["check_same_thread"] = False
-            return create_engine(url, future=True, connect_args=connect_args)
+            elif url.startswith("postgresql"):
+                # Add a short connection timeout to avoid hanging on unavailable PostgreSQL server
+                connect_args["connect_timeout"] = 3
+            return create_engine(url, future=True, connect_args=connect_args, pool_pre_ping=True, pool_recycle=3600)
 
         def _build_engine_with_fallback(self, primary_url: str, fallback_url: str):
             # Prefer configured DB, but gracefully fall back to SQLite when Postgres
@@ -229,6 +233,26 @@ if SQLALCHEMY_AVAILABLE:
                 return session.scalar(
                     select(VehicleRecord).where(VehicleRecord.plate_number == plate_number)
                 )
+
+        def update_plate_number(
+            self,
+            violation_id: str,
+            plate_number: Optional[str],
+            confidence: float = 0.0,
+        ) -> None:
+            """Persist a deferred plate reading onto an already-saved violation record."""
+            with self.db.session() as session:
+                record = session.get(ViolationRecord, violation_id)
+                if record is None:
+                    return
+                record.plate_number = plate_number
+                if plate_number and plate_number not in ("UNREAD", "UNREADABLE"):
+                    record.status = "processed"
+                    vehicle = session.scalar(
+                        select(VehicleRecord).where(VehicleRecord.plate_number == plate_number)
+                    )
+                    if vehicle is not None:
+                        record.vehicle_ref_id = vehicle.id
 
         def analytics(self) -> Dict[str, object]:
             with self.db.session() as session:
@@ -424,6 +448,8 @@ else:
                 llm_report_json=row["llm_report_json"],
                 llm_report_text=row["llm_report_text"],
                 vehicle_ref_id=row["vehicle_ref_id"],
+                snapshot_path=row["snapshot_path"] if "snapshot_path" in row.keys() else None,
+                location_name=row["location_name"] if "location_name" in row.keys() else None,
                 vehicle_speed_estimate=row["vehicle_speed_estimate"] if "vehicle_speed_estimate" in row.keys() else None,
                 plate_crop_path=row["plate_crop_path"] if "plate_crop_path" in row.keys() else None,
             )
@@ -590,6 +616,33 @@ else:
                     (plate_number,),
                 ).fetchone()
                 return self._row_to_vehicle(row) if row else None
+
+        def update_plate_number(
+            self,
+            violation_id: str,
+            plate_number: Optional[str],
+            confidence: float = 0.0,
+        ) -> None:
+            """Persist a deferred plate reading onto an already-saved violation record."""
+            is_real = bool(plate_number and plate_number not in ("UNREAD", "UNREADABLE"))
+            status = "processed" if is_real else "pending"
+            with self.db.session() as conn:
+                vehicle_ref_id = None
+                if is_real:
+                    row = conn.execute(
+                        "SELECT id FROM vehicles WHERE plate_number = ?", (plate_number,)
+                    ).fetchone()
+                    if row:
+                        vehicle_ref_id = row["id"]
+                # COALESCE keeps any existing vehicle_ref_id if we couldn't resolve one
+                conn.execute(
+                    """UPDATE violations
+                       SET plate_number = ?,
+                           status = ?,
+                           vehicle_ref_id = COALESCE(?, vehicle_ref_id)
+                       WHERE id = ?""",
+                    (plate_number, status, vehicle_ref_id, violation_id),
+                )
 
         def analytics(self) -> Dict[str, object]:
             with self.db.session() as conn:
