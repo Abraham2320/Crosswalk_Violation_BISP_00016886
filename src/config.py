@@ -35,7 +35,7 @@ class ModelSettings:
     ocr_backend: str = os.getenv("OCR_BACKEND", "easyocr")
     ocr_confidence_threshold: float = float(os.getenv("OCR_CONFIDENCE_THRESHOLD", "0.40"))
     plate_regex: str = os.getenv("PLATE_REGEX", r"^[A-Z0-9]{5,10}$")
-    llm_provider: str = os.getenv("LLM_PROVIDER", "mock")
+    llm_provider: str = os.getenv("LLM_PROVIDER", "anthropic")
     anthropic_model: str = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-6")
     anthropic_api_key: str = os.getenv("ANTHROPIC_API_KEY", "")
 

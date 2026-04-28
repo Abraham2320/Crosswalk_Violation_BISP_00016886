@@ -124,8 +124,6 @@ class CameraStream:
         candidates.append((src, None))
 
         # Windows-specific backend fallbacks for camera indexes.
-        # Note: we only retry the SAME index with different backends — we never
-        # silently switch to a different device index (would confuse the user).
         if isinstance(src, int):
             candidates.append((src, cv2.CAP_DSHOW))
             candidates.append((src, cv2.CAP_MSMF))
@@ -272,9 +270,9 @@ camera_manager = CameraStream()
 # ── Multi-camera configuration ────────────────────────────────────────────────
 
 CAMERA_CONFIGS: dict[str, dict] = {
-    "cam1": {"label": "Camera 1 — Entrance",  "demo": "Videos/v1.mp4"},
-    "cam2": {"label": "Camera 2 — Crosswalk", "demo": "Videos/v2.mp4"},
-    "cam3": {"label": "Camera 3 — Exit",      "demo": "Videos/v3.mp4"},
+    "cam1": {"label": "Camera 1 - Phone Camera",  "source": "http://localhost:4747/video", "demo": "Videos/v1.mp4"},
+    "cam2": {"label": "Camera 2", "demo": "Videos/v2.mp4"},
+    "cam3": {"label": "Camera 3",      "demo": "Videos/v3.mp4"},
 }
 
 

@@ -2,48 +2,6 @@
 camera_bridge.py — Run this on your LOCAL Windows PC to forward a camera
 (USB webcam OR DroidCam phone camera) to the Colab GPU instance.
 
-WHY THIS EXISTS:
-  Colab cannot access your PC's webcam or phone camera directly.  This script
-  captures from any OpenCV-compatible source and serves it as an MJPEG HTTP
-  stream on port 8080.  You then expose that with a Cloudflare Quick Tunnel
-  (no account) so Colab can connect.
-
-ARCHITECTURE:
-  [DroidCam / webcam] → [this script :8080] → [cloudflared tunnel] → [Colab CAMERA_SOURCE]
-  Colab reads frames as if from a regular IP camera stream.
-
-─────────────────────────────────────────────────────────────────────────────
-MODE A — DroidCam (recommended: your phone becomes an IP camera)
-─────────────────────────────────────────────────────────────────────────────
-  1. Install "DroidCam" on your Android phone (free, by Dev47Apps).
-  2. Connect phone and PC to the SAME Wi-Fi.
-  3. Open DroidCam on the phone — it shows the phone's local IP and port
-     (default port 4747).
-  4. Set the env var before running:
-       set DROIDCAM_URL=http://192.168.X.X:4747/video
-
-     Or on macOS/Linux:
-       export DROIDCAM_URL=http://192.168.X.X:4747/video
-
-  5. Run this bridge:
-       python camera_bridge.py
-
-  6. In a second terminal, expose it via Cloudflare (no account needed):
-       cloudflared tunnel --url http://localhost:8080
-
-  7. Copy the *.trycloudflare.com URL and paste it into Colab Cell B3:
-       CAMERA_SOURCE = "https://YOUR-ID.trycloudflare.com/video"
-
-─────────────────────────────────────────────────────────────────────────────
-MODE B — USB / built-in webcam (original behaviour)
-─────────────────────────────────────────────────────────────────────────────
-  Leave DROIDCAM_URL unset.  Adjust CAMERA_INDEX if you have multiple cameras:
-       set CAMERA_INDEX=1
-       python camera_bridge.py
-
-TESTING:
-  While the bridge is running, open http://localhost:8080 in your browser —
-  you should see the camera feed.  If that works, the Cloudflare URL will too.
 """
 from __future__ import annotations
 

@@ -48,6 +48,11 @@ _DIRECTION_THRESHOLD   = 15    # minimum net X-pixel displacement over 8 frames
 _MIN_MOVING_SPEED_PX   = 2.0   # avg px/frame below this → vehicle is stationary
 _ROAD_Y_MIN = int(os.getenv("LIVE_ROAD_Y_MIN", "0"))
 _ROAD_Y_MAX = int(os.getenv("LIVE_ROAD_Y_MAX", "9999"))
+# Which sign of dx counts as the legitimate ("forward") flow direction.
+# +1 means cars normally move right (dx > 0 = forward).
+# -1 means cars normally move left  (dx < 0 = forward).
+# Set to 0 to disable wrong-direction detection entirely.
+_FORWARD_SIGN = int(os.getenv("LIVE_FORWARD_DIR_SIGN", "1"))
 
 _POLYGON_PATH = Path(__file__).parent / "crosswalk_polygon.json"
 _SNAPSHOTS    = Path(__file__).parent / "static" / "snapshots"
@@ -107,7 +112,15 @@ def _speed(vt) -> Optional[float]:
 
 
 def _compute_vehicle_direction(vt) -> str:
-    """Return 'FORWARD', 'REVERSE', or 'STATIONARY' from the last 8 centroid positions."""
+    """Return 'FORWARD', 'REVERSE', or 'STATIONARY' from the last 8 centroid positions.
+
+    The sign convention is configurable via LIVE_FORWARD_DIR_SIGN:
+    +1 (default) → cars normally move right; dx > 0 is FORWARD.
+    -1           → cars normally move left;  dx < 0 is FORWARD.
+     0           → wrong-direction detection disabled.
+    """
+    if _FORWARD_SIGN == 0:
+        return "STATIONARY"   # disables WRONG_DIRECTION violations entirely
     positions = list(vt.centroid_history)
     if len(positions) < 8:
         return "STATIONARY"
@@ -118,9 +131,10 @@ def _compute_vehicle_direction(vt) -> str:
     ) / (len(recent) - 1)
     if avg_x_motion < 5.0:
         return "STATIONARY"
-    if dx < -_DIRECTION_THRESHOLD:
+    signed_dx = dx * _FORWARD_SIGN
+    if signed_dx < -_DIRECTION_THRESHOLD:
         return "REVERSE"
-    if dx > _DIRECTION_THRESHOLD:
+    if signed_dx > _DIRECTION_THRESHOLD:
         return "FORWARD"
     return "STATIONARY"
 
