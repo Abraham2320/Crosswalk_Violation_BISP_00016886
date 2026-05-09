@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 import sqlite3
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -8,43 +7,29 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Dict, Iterator, List, Optional
 from uuid import uuid4
-
 from config import AppSettings
 from schemas import InvoiceRecordData
-
 try:
     from sqlalchemy import DateTime, Float, ForeignKey, Integer, Numeric, String, Text, create_engine, func, select, text
     from sqlalchemy.exc import SQLAlchemyError
     from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, relationship, sessionmaker
-
     SQLALCHEMY_AVAILABLE = True
 except ModuleNotFoundError:
     SQLALCHEMY_AVAILABLE = False
-
-
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
-
-
 if SQLALCHEMY_AVAILABLE:
     class Base(DeclarativeBase):
         pass
-
-
     class VehicleRecord(Base):
         __tablename__ = "vehicles"
-
         id: Mapped[str] = mapped_column(String(64), primary_key=True, default=lambda: str(uuid4()))
         plate_number: Mapped[str] = mapped_column(String(32), unique=True, index=True, nullable=False)
         owner_name: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
         violations_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-
         violations: Mapped[List["ViolationRecord"]] = relationship(back_populates="vehicle")
-
-
     class ViolationRecord(Base):
         __tablename__ = "violations"
-
         id: Mapped[str] = mapped_column(String(64), primary_key=True)
         timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
         plate_number: Mapped[Optional[str]] = mapped_column(String(32), index=True, nullable=True)
@@ -72,14 +57,10 @@ if SQLALCHEMY_AVAILABLE:
         snapshot_path: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
         location_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
         plate_crop_path: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-
         vehicle: Mapped[Optional[VehicleRecord]] = relationship(back_populates="violations")
         invoice: Mapped[Optional["InvoiceRecord"]] = relationship(back_populates="violation", uselist=False)
-
-
     class InvoiceRecord(Base):
         __tablename__ = "invoices"
-
         id: Mapped[str] = mapped_column(String(64), primary_key=True, default=lambda: str(uuid4()))
         violation_id: Mapped[str] = mapped_column(
             String(64),
@@ -91,10 +72,7 @@ if SQLALCHEMY_AVAILABLE:
         issued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
         status: Mapped[str] = mapped_column(String(32), default="issued", nullable=False)
         pdf_path: Mapped[str] = mapped_column(Text, nullable=False)
-
         violation: Mapped[ViolationRecord] = relationship(back_populates="invoice")
-
-
     class Database:
         def __init__(self, settings: AppSettings):
             self.settings = settings
@@ -104,19 +82,14 @@ if SQLALCHEMY_AVAILABLE:
                 settings.storage.sqlite_fallback_url,
             )
             self.SessionLocal = sessionmaker(bind=self.engine, expire_on_commit=False, class_=Session)
-
         def _build_engine(self, url: str):
             connect_args = {}
             if url.startswith("sqlite"):
                 connect_args["check_same_thread"] = False
             elif url.startswith("postgresql"):
-                # Add a short connection timeout to avoid hanging on unavailable PostgreSQL server
                 connect_args["connect_timeout"] = 3
             return create_engine(url, future=True, connect_args=connect_args, pool_pre_ping=True, pool_recycle=3600)
-
         def _build_engine_with_fallback(self, primary_url: str, fallback_url: str):
-            # Prefer configured DB, but gracefully fall back to SQLite when Postgres
-            # is unavailable in local development (missing driver, no server, etc.).
             if primary_url.startswith("postgresql"):
                 try:
                     engine = self._build_engine(primary_url)
@@ -128,18 +101,14 @@ if SQLALCHEMY_AVAILABLE:
                         fallback_url = "sqlite:///crosswalk_violations.db"
                     print(f"[Database] Primary DB unavailable; falling back to SQLite. ({exc})")
                     return fallback_url, self._build_engine(fallback_url)
-
             return primary_url, self._build_engine(primary_url)
-
         def _resolve_database_url(self, settings: AppSettings) -> str:
             url = settings.storage.database_url
             if url.startswith("postgresql") or url.startswith("sqlite"):
                 return url
             return settings.storage.sqlite_fallback_url
-
         def create_all(self) -> None:
             Base.metadata.create_all(self.engine)
-
         @contextmanager
         def session(self) -> Iterator[Session]:
             session = self.SessionLocal()
@@ -151,12 +120,9 @@ if SQLALCHEMY_AVAILABLE:
                 raise
             finally:
                 session.close()
-
-
     class ViolationRepository:
         def __init__(self, db: Database):
             self.db = db
-
         def upsert_vehicle(self, plate_number: str, owner_name: Optional[str] = None) -> VehicleRecord:
             with self.db.session() as session:
                 vehicle = session.scalar(
@@ -175,7 +141,6 @@ if SQLALCHEMY_AVAILABLE:
                         vehicle.owner_name = owner_name
                 session.flush()
                 return vehicle
-
         def save_violation(self, payload: Dict[str, object]) -> ViolationRecord:
             with self.db.session() as session:
                 plate_number = payload.get("plate_number")
@@ -191,7 +156,6 @@ if SQLALCHEMY_AVAILABLE:
                 session.add(record)
                 session.flush()
                 return record
-
         def create_invoice(self, invoice: InvoiceRecordData) -> InvoiceRecord:
             with self.db.session() as session:
                 record = InvoiceRecord(
@@ -203,7 +167,6 @@ if SQLALCHEMY_AVAILABLE:
                 session.add(record)
                 session.flush()
                 return record
-
         def list_violations(self, limit: int = 100) -> List[ViolationRecord]:
             with self.db.session() as session:
                 return list(
@@ -213,11 +176,9 @@ if SQLALCHEMY_AVAILABLE:
                         .limit(limit)
                     )
                 )
-
         def get_violation(self, violation_id: str) -> Optional[ViolationRecord]:
             with self.db.session() as session:
                 return session.get(ViolationRecord, violation_id)
-
         def get_plate_history(self, plate_number: str) -> List[ViolationRecord]:
             with self.db.session() as session:
                 return list(
@@ -227,20 +188,17 @@ if SQLALCHEMY_AVAILABLE:
                         .order_by(ViolationRecord.timestamp.desc())
                     )
                 )
-
         def get_vehicle_by_plate(self, plate_number: str) -> Optional[VehicleRecord]:
             with self.db.session() as session:
                 return session.scalar(
                     select(VehicleRecord).where(VehicleRecord.plate_number == plate_number)
                 )
-
         def update_plate_number(
             self,
             violation_id: str,
             plate_number: Optional[str],
             confidence: float = 0.0,
         ) -> None:
-            """Persist a deferred plate reading onto an already-saved violation record."""
             with self.db.session() as session:
                 record = session.get(ViolationRecord, violation_id)
                 if record is None:
@@ -253,7 +211,6 @@ if SQLALCHEMY_AVAILABLE:
                     )
                     if vehicle is not None:
                         record.vehicle_ref_id = vehicle.id
-
         def analytics(self) -> Dict[str, object]:
             with self.db.session() as session:
                 total = session.scalar(select(func.count(ViolationRecord.id))) or 0
@@ -272,7 +229,6 @@ if SQLALCHEMY_AVAILABLE:
                     "by_status": [{"status": row[0], "count": row[1]} for row in statuses],
                     "by_day": [{"day": str(row[0]), "count": row[1]} for row in per_day],
                 }
-
 else:
     @dataclass(slots=True)
     class VehicleRecord:
@@ -280,8 +236,6 @@ else:
         plate_number: str
         owner_name: Optional[str]
         violations_count: int
-
-
     @dataclass(slots=True)
     class ViolationRecord:
         id: str
@@ -307,8 +261,6 @@ else:
         snapshot_path: Optional[str] = None
         location_name: Optional[str] = None
         plate_crop_path: Optional[str] = None
-
-
     @dataclass(slots=True)
     class InvoiceRecord:
         id: str
@@ -317,17 +269,13 @@ else:
         issued_at: datetime
         status: str
         pdf_path: str
-
-
     class Database:
         def __init__(self, settings: AppSettings):
             self.db_path = self._resolve_sqlite_path(settings.storage.sqlite_fallback_url)
-
         def _resolve_sqlite_path(self, database_url: str) -> Path:
             if database_url.startswith("sqlite:///"):
                 return Path(database_url.replace("sqlite:///", "", 1))
             return Path("crosswalk_violations.db")
-
         def create_all(self) -> None:
             self.db_path.parent.mkdir(parents=True, exist_ok=True)
             with sqlite3.connect(self.db_path) as conn:
@@ -381,7 +329,6 @@ else:
                     )
                     """
                 )
-                # Migration: add columns if DB was created before they existed
                 for _col, _def in [
                     ("severity",               "TEXT NOT NULL DEFAULT 'HIGH'"),
                     ("snapshot_path",          "TEXT"),
@@ -394,13 +341,12 @@ else:
                             f"ALTER TABLE violations ADD COLUMN {_col} {_def}"
                         )
                     except sqlite3.OperationalError:
-                        pass  # column already exists
+                        pass
                 conn.execute("CREATE INDEX IF NOT EXISTS ix_violations_plate_number ON violations (plate_number)")
                 conn.execute(
                     "CREATE INDEX IF NOT EXISTS ix_violations_plate_timestamp ON violations (plate_number, timestamp)"
                 )
                 conn.commit()
-
         @contextmanager
         def session(self) -> Iterator[sqlite3.Connection]:
             conn = sqlite3.connect(self.db_path)
@@ -413,12 +359,9 @@ else:
                 raise
             finally:
                 conn.close()
-
-
     class ViolationRepository:
         def __init__(self, db: Database):
             self.db = db
-
         def _row_to_vehicle(self, row: sqlite3.Row) -> VehicleRecord:
             return VehicleRecord(
                 id=row["id"],
@@ -426,7 +369,6 @@ else:
                 owner_name=row["owner_name"],
                 violations_count=row["violations_count"],
             )
-
         def _row_to_violation(self, row: sqlite3.Row) -> ViolationRecord:
             return ViolationRecord(
                 id=row["id"],
@@ -453,7 +395,6 @@ else:
                 vehicle_speed_estimate=row["vehicle_speed_estimate"] if "vehicle_speed_estimate" in row.keys() else None,
                 plate_crop_path=row["plate_crop_path"] if "plate_crop_path" in row.keys() else None,
             )
-
         def _row_to_invoice(self, row: sqlite3.Row) -> InvoiceRecord:
             return InvoiceRecord(
                 id=row["id"],
@@ -463,7 +404,6 @@ else:
                 status=row["status"],
                 pdf_path=row["pdf_path"],
             )
-
         def upsert_vehicle(self, plate_number: str, owner_name: Optional[str] = None) -> VehicleRecord:
             with self.db.session() as conn:
                 row = conn.execute(
@@ -485,7 +425,6 @@ else:
                         (vehicle.id, vehicle.plate_number, vehicle.owner_name, vehicle.violations_count),
                     )
                     return vehicle
-
                 updated = VehicleRecord(
                     id=row["id"],
                     plate_number=plate_number,
@@ -501,7 +440,6 @@ else:
                     (updated.owner_name, updated.violations_count, plate_number),
                 )
                 return updated
-
         def save_violation(self, payload: Dict[str, object]) -> ViolationRecord:
             timestamp = payload["timestamp"]
             created_at = payload.get("created_at") or utc_now()
@@ -513,13 +451,11 @@ else:
                 created_at_value = created_at.isoformat()
             else:
                 created_at_value = str(created_at)
-
             vehicle_ref_id = None
             plate_number = payload.get("plate_number")
             if plate_number:
                 vehicle = self.get_vehicle_by_plate(str(plate_number))
                 vehicle_ref_id = vehicle.id if vehicle else None
-
             with self.db.session() as conn:
                 conn.execute(
                     """
@@ -558,7 +494,6 @@ else:
                 )
                 row = conn.execute("SELECT * FROM violations WHERE id = ?", (payload["id"],)).fetchone()
                 return self._row_to_violation(row)
-
         def create_invoice(self, invoice: InvoiceRecordData) -> InvoiceRecord:
             record = InvoiceRecord(
                 id=str(uuid4()),
@@ -584,7 +519,6 @@ else:
                     ),
                 )
             return record
-
         def list_violations(self, limit: int = 100) -> List[ViolationRecord]:
             with self.db.session() as conn:
                 rows = conn.execute(
@@ -592,7 +526,6 @@ else:
                     (limit,),
                 ).fetchall()
                 return [self._row_to_violation(row) for row in rows]
-
         def get_violation(self, violation_id: str) -> Optional[ViolationRecord]:
             with self.db.session() as conn:
                 row = conn.execute(
@@ -600,7 +533,6 @@ else:
                     (violation_id,),
                 ).fetchone()
                 return self._row_to_violation(row) if row else None
-
         def get_plate_history(self, plate_number: str) -> List[ViolationRecord]:
             with self.db.session() as conn:
                 rows = conn.execute(
@@ -608,7 +540,6 @@ else:
                     (plate_number,),
                 ).fetchall()
                 return [self._row_to_violation(row) for row in rows]
-
         def get_vehicle_by_plate(self, plate_number: str) -> Optional[VehicleRecord]:
             with self.db.session() as conn:
                 row = conn.execute(
@@ -616,14 +547,12 @@ else:
                     (plate_number,),
                 ).fetchone()
                 return self._row_to_vehicle(row) if row else None
-
         def update_plate_number(
             self,
             violation_id: str,
             plate_number: Optional[str],
             confidence: float = 0.0,
         ) -> None:
-            """Persist a deferred plate reading onto an already-saved violation record."""
             is_real = bool(plate_number and plate_number not in ("UNREAD", "UNREADABLE"))
             status = "processed" if is_real else "pending"
             with self.db.session() as conn:
@@ -634,7 +563,6 @@ else:
                     ).fetchone()
                     if row:
                         vehicle_ref_id = row["id"]
-                # COALESCE keeps any existing vehicle_ref_id if we couldn't resolve one
                 conn.execute(
                     """UPDATE violations
                        SET plate_number = ?,
@@ -643,7 +571,6 @@ else:
                        WHERE id = ?""",
                     (plate_number, status, vehicle_ref_id, violation_id),
                 )
-
         def analytics(self) -> Dict[str, object]:
             with self.db.session() as conn:
                 total = conn.execute("SELECT COUNT(*) AS count FROM violations").fetchone()["count"]

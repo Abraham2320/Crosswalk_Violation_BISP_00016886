@@ -1,38 +1,35 @@
-﻿/* ============================================================
-   theme.css â€” shadcn/ui-inspired design system
-   Crosswalk Enforcement System
-   ============================================================ */
+﻿
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
 
-/* â”€â”€ CSS Variables (shadcn/ui dark palette) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+
 :root,
 [data-theme="dark"] {
-  /* Background layers */
+  
   --bg-primary:         hsl(224 71% 4%);
   --bg-card:            hsl(224 71% 6%);
   --bg-elevated:        hsl(224 71% 8%);
-  --bg-glass:           hsla(224, 71%, 7%, 0.85);
+  --bg-glass:           hsla(224, 71%, 7%, 0.70);
   --bg-muted:           hsl(223 47% 11%);
   --bg-popover:         hsl(224 71% 6%);
 
-  /* Borders */
+  
   --border:             hsl(216 34% 17%);
   --border-subtle:      hsl(217 33% 12%);
-  --border-active:      hsl(38 92% 53%);
-  --border-glow:        hsla(38, 92%, 53%, 0.35);
+  --border-active:      hsl(217 72% 48%);
+  --border-glow:        hsla(217, 72%, 48%, 0.25);
   --border-input:       hsl(216 34% 22%);
 
-  /* Text */
+  
   --text-primary:       hsl(213 31% 91%);
   --text-secondary:     hsl(215 20% 65%);
   --text-muted:         hsl(218 11% 35%);
   --text-disabled:      hsl(218 11% 25%);
 
-  /* Accent â€” kept amber + red/green for domain meaning */
-  --accent-amber:       hsl(38 92% 53%);
-  --accent-amber-dim:   hsla(38, 92%, 53%, 0.10);
-  --accent-amber-glow:  hsla(38, 92%, 53%, 0.20);
+  
+  --accent-amber:       hsl(217 72% 48%);
+  --accent-amber-dim:   hsla(217, 72%, 48%, 0.10);
+  --accent-amber-glow:  hsla(217, 72%, 48%, 0.14);
   --accent-red:         hsl(0 72% 60%);
   --accent-red-dim:     hsla(0, 72%, 60%, 0.10);
   --accent-red-glow:    hsla(0, 72%, 60%, 0.20);
@@ -42,27 +39,27 @@
   --accent-blue:        hsl(217 91% 60%);
   --accent-blue-dim:    hsla(217, 91%, 60%, 0.10);
 
-  /* Typography */
-  --font-display:     'Inter', sans-serif;
+  
+  --font-display:     'Space Grotesk', 'Inter', sans-serif;
   --font-mono:        'JetBrains Mono', monospace;
   --font-body:        'Inter', sans-serif;
 
-  /* Shape */
+  
   --radius:           8px;
   --radius-sm:        6px;
   --radius-lg:        12px;
   --radius-xl:        16px;
   --radius-full:      9999px;
 
-  /* Motion */
+  
   --transition:       150ms cubic-bezier(0.4, 0, 0.2, 1);
   --transition-slow:  300ms cubic-bezier(0.4, 0, 0.2, 1);
 
-  /* Shadows (shadcn-style: subtle, layered) */
+  
   --shadow-sm:        0 1px 2px rgba(0,0,0,0.5);
   --shadow-card:      0 1px 3px rgba(0,0,0,0.5), 0 1px 2px rgba(0,0,0,0.4);
   --shadow-lg:        0 4px 24px rgba(0,0,0,0.4), 0 1px 4px rgba(0,0,0,0.3);
-  --shadow-glow-amber:0 0 0 1px hsla(38,92%,53%,0.12), 0 4px 16px hsla(38,92%,53%,0.08);
+  --shadow-glow-amber:0 0 0 1px hsla(217,72%,48%,0.12), 0 4px 16px hsla(217,72%,48%,0.08);
   --shadow-glow-red:  0 0 0 1px hsla(0,72%,60%,0.12),  0 4px 16px hsla(0,72%,60%,0.08);
   --shadow-glow-green:0 0 0 1px hsla(160,60%,45%,0.12),0 4px 16px hsla(160,60%,45%,0.08);
 }
@@ -71,14 +68,14 @@
   --bg-primary:         hsl(42 40% 97%);
   --bg-card:            hsl(0 0% 100%);
   --bg-elevated:        hsl(40 50% 99%);
-  --bg-glass:           hsla(38, 55%, 97%, 0.88);
-  --bg-muted:           hsl(39 44% 94%);
+  --bg-glass:           hsla(217, 35%, 97%, 0.88);
+  --bg-muted:           hsl(217 20% 94%);
   --bg-popover:         hsl(0 0% 100%);
 
-  --border:             hsl(34 24% 84%);
-  --border-subtle:      hsl(35 23% 90%);
-  --border-active:      hsl(35 87% 45%);
-  --border-glow:        hsla(35, 87%, 45%, 0.25);
+  --border:             hsl(217 24% 84%);
+  --border-subtle:      hsl(217 23% 90%);
+  --border-active:      hsl(217 72% 45%);
+  --border-glow:        hsla(217, 72%, 45%, 0.25);
   --border-input:       hsl(34 20% 80%);
 
   --text-primary:       hsl(221 28% 18%);
@@ -86,9 +83,9 @@
   --text-muted:         hsl(216 10% 48%);
   --text-disabled:      hsl(214 8% 65%);
 
-  --accent-amber:       hsl(35 92% 45%);
-  --accent-amber-dim:   hsla(35, 92%, 45%, 0.12);
-  --accent-amber-glow:  hsla(35, 92%, 45%, 0.20);
+  --accent-amber:       hsl(217 72% 45%);
+  --accent-amber-dim:   hsla(217, 72%, 45%, 0.12);
+  --accent-amber-glow:  hsla(217, 72%, 45%, 0.14);
   --accent-red:         hsl(0 75% 54%);
   --accent-red-dim:     hsla(0, 75%, 54%, 0.10);
   --accent-red-glow:    hsla(0, 75%, 54%, 0.16);
@@ -101,12 +98,12 @@
   --shadow-sm:          0 1px 2px rgba(15, 23, 42, 0.08);
   --shadow-card:        0 1px 2px rgba(15, 23, 42, 0.06), 0 10px 25px rgba(15, 23, 42, 0.05);
   --shadow-lg:          0 20px 40px rgba(15, 23, 42, 0.10), 0 6px 18px rgba(15, 23, 42, 0.07);
-  --shadow-glow-amber:  0 0 0 1px hsla(35,92%,45%,0.11), 0 8px 22px hsla(35,92%,45%,0.10);
+  --shadow-glow-amber:  0 0 0 1px hsla(217,72%,45%,0.11), 0 8px 22px hsla(217,72%,45%,0.10);
   --shadow-glow-red:    0 0 0 1px hsla(0,75%,54%,0.10), 0 8px 20px hsla(0,75%,54%,0.08);
   --shadow-glow-green:  0 0 0 1px hsla(157,63%,35%,0.10), 0 8px 20px hsla(157,63%,35%,0.08);
 }
 
-/* â”€â”€ Reset â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 html { font-size: 14px; scroll-behavior: smooth; }
@@ -126,7 +123,7 @@ body {
 a { color: var(--accent-amber); text-decoration: none; }
 a:hover { text-decoration: underline; opacity: 0.9; }
 
-/* â”€â”€ Navigation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+
 .nav-bar {
   position: fixed;
   top: 0; left: 0; right: 0;
@@ -149,10 +146,10 @@ a:hover { text-decoration: underline; opacity: 0.9; }
   align-items: center;
   gap: 8px;
   color: var(--text-primary);
-  font-family: var(--font-body);
-  font-weight: 600;
+  font-family: var(--font-display);
+  font-weight: 700;
   font-size: 14px;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
   text-decoration: none;
 }
 .nav-brand svg { color: var(--accent-amber); flex-shrink: 0; }
@@ -190,7 +187,7 @@ a:hover { text-decoration: underline; opacity: 0.9; }
 }
 .nav-link.active::after { display: none; }
 
-/* â”€â”€ Main content â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+
 .main-content {
   padding-top: 56px;
   min-height: calc(100vh - 56px);
@@ -207,10 +204,10 @@ a:hover { text-decoration: underline; opacity: 0.9; }
 }
 
 .page-title {
-  font-family: var(--font-body);
-  font-weight: 600;
+  font-family: var(--font-display);
+  font-weight: 700;
   font-size: 22px;
-  letter-spacing: -0.025em;
+  letter-spacing: -0.03em;
   color: var(--text-primary);
   line-height: 1.2;
   text-transform: none;
@@ -224,7 +221,7 @@ a:hover { text-decoration: underline; opacity: 0.9; }
   letter-spacing: 0.01em;
 }
 
-/* â”€â”€ Footer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+
 .site-footer {
   text-align: center;
   padding: 16px 24px;
@@ -235,11 +232,13 @@ a:hover { text-decoration: underline; opacity: 0.9; }
 }
 
 .card {
-  background: var(--bg-card);
+  background: hsla(224, 71%, 6%, 0.65);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   padding: 20px;
   box-shadow: var(--shadow-card);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   transition: border-color var(--transition), box-shadow var(--transition);
 }
 .card:hover {
@@ -247,34 +246,36 @@ a:hover { text-decoration: underline; opacity: 0.9; }
 }
 
 .card-title {
-  font-family: var(--font-body);
-  font-weight: 600;
+  font-family: var(--font-display);
+  font-weight: 700;
   font-size: 11px;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--text-muted);
   margin-bottom: 14px;
 }
 
-/* â”€â”€ Stat cards â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+
 .stat-card {
-  background: var(--bg-card);
+  background: hsla(224, 71%, 6%, 0.60);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   padding: 20px;
   position: relative;
   overflow: hidden;
   box-shadow: var(--shadow-card);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   transition: border-color var(--transition), box-shadow var(--transition), transform var(--transition);
 }
 .stat-card::before { display: none; }
 .stat-card:hover {
   border-color: var(--border-input);
-  box-shadow: var(--shadow-lg), 0 0 0 1px hsla(38,92%,53%,0.07), 0 6px 24px hsla(38,92%,53%,0.06);
+  box-shadow: var(--shadow-lg), 0 0 0 1px hsla(217,72%,48%,0.07), 0 6px 24px hsla(217,72%,48%,0.06);
   transform: translateY(-1px);
 }
 
-/* Subtle left accent strip (shadcn pattern) */
+
 .stat-card::after {
   content: '';
   position: absolute;
@@ -304,7 +305,7 @@ a:hover { text-decoration: underline; opacity: 0.9; }
   letter-spacing: -0.03em;
   transition: color var(--transition);
 }
-.stat-card:hover .stat-value { color: hsl(38 92% 72%); }
+.stat-card:hover .stat-value { color: hsl(217 72% 70%); }
 
 .stat-label {
   font-family: var(--font-body);
@@ -315,7 +316,7 @@ a:hover { text-decoration: underline; opacity: 0.9; }
   color: var(--text-muted);
 }
 
-/* â”€â”€ Badges â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+
 .badge {
   display: inline-flex;
   align-items: center;
@@ -341,7 +342,7 @@ a:hover { text-decoration: underline; opacity: 0.9; }
 .badge-low {
   background: var(--accent-amber-dim);
   color: var(--accent-amber);
-  border-color: hsla(38, 92%, 53%, 0.2);
+  border-color: hsla(217, 72%, 48%, 0.2);
 }
 
 .badge-ok {
@@ -350,10 +351,10 @@ a:hover { text-decoration: underline; opacity: 0.9; }
   border-color: hsla(160, 60%, 45%, 0.2);
 }
 
-/* â”€â”€ Pulse animation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+
 @keyframes pulseAmber {
-  0%, 100% { box-shadow: 0 0 0 0 hsla(38, 92%, 53%, 0.35); }
-  50%       { box-shadow: 0 0 0 5px hsla(38, 92%, 53%, 0); }
+  0%, 100% { box-shadow: 0 0 0 0 hsla(217, 72%, 48%, 0.30); }
+  50%       { box-shadow: 0 0 0 5px hsla(217, 72%, 48%, 0); }
 }
 
 .pulse-amber {
@@ -367,7 +368,7 @@ a:hover { text-decoration: underline; opacity: 0.9; }
   100% { top: 100%; opacity: 0; }
 }
 
-/* â”€â”€ Data table â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+
 .data-table {
   width: 100%;
   border-collapse: collapse;
@@ -415,7 +416,7 @@ a:hover { text-decoration: underline; opacity: 0.9; }
 
 .data-table tr.clickable { cursor: pointer; }
 
-/* â”€â”€ Buttons (shadcn variants) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+
 .btn-primary {
   display: inline-flex;
   align-items: center;
@@ -436,8 +437,8 @@ a:hover { text-decoration: underline; opacity: 0.9; }
 }
 .btn-primary:hover {
   opacity: 0.9;
-  box-shadow: 0 2px 8px hsla(38, 92%, 53%, 0.3);
-  color: hsl(224 71% 4%);
+  box-shadow: 0 2px 8px hsla(217, 72%, 48%, 0.3);
+  color: hsl(0 0% 100%);
   text-decoration: none;
 }
 .btn-primary:disabled {
@@ -498,7 +499,7 @@ a:hover { text-decoration: underline; opacity: 0.9; }
   font-size: 12px;
 }
 
-/* â”€â”€ Inputs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+
 .input {
   background: var(--bg-elevated);
   border: 1px solid var(--border-input);
@@ -515,7 +516,7 @@ a:hover { text-decoration: underline; opacity: 0.9; }
 }
 .input:focus {
   border-color: var(--accent-amber);
-  box-shadow: 0 0 0 3px hsla(38, 92%, 53%, 0.12);
+  box-shadow: 0 0 0 3px hsla(217, 72%, 48%, 0.12);
 }
 .input::placeholder { color: var(--text-disabled); }
 
@@ -524,7 +525,7 @@ select.input option {
   color: var(--text-primary);
 }
 
-/* â”€â”€ Form groups â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+
 .form-group { margin-bottom: 16px; }
 .form-label {
   display: block;
@@ -537,7 +538,7 @@ select.input option {
   text-transform: none;
 }
 
-/* â”€â”€ Confidence bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+
 .conf-cell {
   position: relative;
   min-width: 80px;
@@ -555,7 +556,7 @@ select.input option {
   font-size: 12px;
 }
 
-/* â”€â”€ Error / info banners â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+
 .alert {
   padding: 12px 16px;
   border-radius: var(--radius);
@@ -570,7 +571,7 @@ select.input option {
 }
 .alert-info {
   background: var(--accent-amber-dim);
-  border: 1px solid hsla(38, 92%, 53%, 0.2);
+  border: 1px solid hsla(217, 72%, 48%, 0.2);
   color: var(--accent-amber);
 }
 .alert-success {
@@ -579,7 +580,7 @@ select.input option {
   color: var(--accent-green);
 }
 
-/* â”€â”€ Grid helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+
 .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
 .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
 .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
@@ -591,7 +592,7 @@ select.input option {
   .grid-4, .grid-3, .grid-2 { grid-template-columns: 1fr; }
 }
 
-/* â”€â”€ Text utilities â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+
 .text-amber   { color: var(--accent-amber); }
 .text-red     { color: var(--accent-red); }
 .text-green   { color: var(--accent-green); }
@@ -600,14 +601,14 @@ select.input option {
 .font-mono    { font-family: var(--font-mono); }
 .uppercase    { text-transform: uppercase; letter-spacing: 0.05em; }
 
-/* â”€â”€ Divider â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+
 .divider {
   border: none;
   border-top: 1px solid var(--border-subtle);
   margin: 20px 0;
 }
 
-/* â”€â”€ Toast notification â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+
 #toast-container {
   position: fixed;
   bottom: 24px;
@@ -644,3 +645,95 @@ select.input option {
   to   { opacity: 0; transform: translateY(-6px); }
 }
 
+::-webkit-scrollbar        { width: 6px; height: 6px; }
+::-webkit-scrollbar-track  { background: transparent; }
+::-webkit-scrollbar-thumb  { background: var(--border); border-radius: 999px; }
+::-webkit-scrollbar-thumb:hover { background: var(--border-input); }
+
+.table-scroll {
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+.data-table tbody tr:last-child td { border-bottom: none; }
+.data-table tbody tr:hover td { background: hsla(217, 72%, 48%, 0.03); }
+
+.badge-yield {
+  background: hsla(0, 72%, 60%, 0.08);
+  color: var(--accent-red);
+  border-color: hsla(0, 72%, 60%, 0.18);
+}
+.badge-reentry {
+  background: hsla(217, 72%, 48%, 0.08);
+  color: var(--accent-amber);
+  border-color: hsla(217, 72%, 48%, 0.18);
+}
+.badge-wrongdir {
+  background: hsla(280, 65%, 60%, 0.08);
+  color: hsl(280 65% 72%);
+  border-color: hsla(280, 65%, 60%, 0.18);
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.card-header .card-title { margin-bottom: 0; }
+
+.stat-card .stat-trend {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 6px;
+}
+
+.section-label {
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.section-label::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border-subtle);
+}
+
+.page-title-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid;
+  white-space: nowrap;
+}
+.tag-red    { color: var(--accent-red);   background: var(--accent-red-dim);   border-color: hsla(0,72%,60%,0.2);   }
+.tag-blue   { color: var(--accent-amber); background: var(--accent-amber-dim); border-color: hsla(217,72%,48%,0.2); }
+.tag-green  { color: var(--accent-green); background: var(--accent-green-dim); border-color: hsla(160,60%,45%,0.2); }
+.tag-purple { color: hsl(280 65% 72%);    background: hsla(280,65%,60%,0.08);  border-color: hsla(280,65%,60%,0.18); }

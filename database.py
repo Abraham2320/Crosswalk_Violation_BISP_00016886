@@ -1,41 +1,21 @@
-"""
-database.py — Flask-specific database access layer.
-Wraps the existing SQLite crosswalk_violations.db, adds migration,
-admin_users, and audit_log tables, and seeds the default admin account.
-"""
 from __future__ import annotations
-
 import os
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator
-
 from werkzeug.security import generate_password_hash
-
 PROJECT_ROOT = Path(__file__).resolve().parent
-
-
 def _resolve_db_path() -> Path:
     explicit_path = os.getenv("DB_PATH", "").strip()
     if explicit_path:
         return Path(explicit_path)
-
     for env_name in ("DATABASE_URL", "SQLITE_FALLBACK_URL"):
         raw_url = os.getenv(env_name, "").strip()
         if raw_url.startswith("sqlite:///"):
             return Path(raw_url.replace("sqlite:///", "", 1))
-
     return PROJECT_ROOT / "crosswalk_violations.db"
-
-
 DB_PATH = _resolve_db_path()
-
-
-# ---------------------------------------------------------------------------
-# Connection helper
-# ---------------------------------------------------------------------------
-
 @contextmanager
 def db_connection() -> Iterator[sqlite3.Connection]:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -50,19 +30,10 @@ def db_connection() -> Iterator[sqlite3.Connection]:
         raise
     finally:
         conn.close()
-
-
-# ---------------------------------------------------------------------------
-# Schema migration + seed
-# ---------------------------------------------------------------------------
-
 def _existing_columns(conn: sqlite3.Connection, table: str) -> set:
     rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
     return {r[1] for r in rows}
-
-
 def init_db() -> None:
-    """Idempotent migration: adds new columns and tables, seeds default admin."""
     with db_connection() as conn:
         conn.executescript(
             """
@@ -72,7 +43,6 @@ def init_db() -> None:
                 owner_name TEXT,
                 violations_count INTEGER NOT NULL DEFAULT 0
             );
-
             CREATE TABLE IF NOT EXISTS violations (
                 id TEXT PRIMARY KEY,
                 timestamp TEXT NOT NULL,
@@ -100,7 +70,6 @@ def init_db() -> None:
                 longitude REAL,
                 location_address TEXT
             );
-
             CREATE TABLE IF NOT EXISTS invoices (
                 id TEXT PRIMARY KEY,
                 violation_id TEXT UNIQUE NOT NULL,
@@ -109,13 +78,10 @@ def init_db() -> None:
                 status TEXT NOT NULL DEFAULT 'issued',
                 pdf_path TEXT NOT NULL
             );
-
             CREATE INDEX IF NOT EXISTS ix_violations_plate_number ON violations (plate_number);
             CREATE INDEX IF NOT EXISTS ix_violations_plate_timestamp ON violations (plate_number, timestamp);
             """
         )
-
-        # ── violations: add new columns safely ───────────────────────────────
         cols = _existing_columns(conn, "violations")
         for col, col_type in {
             "snapshot_path":          "TEXT",
@@ -130,8 +96,6 @@ def init_db() -> None:
                 conn.execute(
                     f"ALTER TABLE violations ADD COLUMN {col} {col_type}"
                 )
-
-        # ── admin_users table ────────────────────────────────────────────────
         conn.execute("""
             CREATE TABLE IF NOT EXISTS admin_users (
                 id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -140,8 +104,6 @@ def init_db() -> None:
                 created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
-
-        # ── audit_log table ──────────────────────────────────────────────────
         conn.execute("""
             CREATE TABLE IF NOT EXISTS audit_log (
                 id             INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -151,8 +113,6 @@ def init_db() -> None:
                 timestamp      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
-
-        # ── cameras table (admin-manageable camera registry) ─────────────────
         conn.execute("""
             CREATE TABLE IF NOT EXISTS cameras (
                 id             INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -169,8 +129,6 @@ def init_db() -> None:
                 updated_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
-
-        # Ensure camera metadata columns exist for older DBs.
         cam_cols = _existing_columns(conn, "cameras")
         for col, col_type in {
             "location_name": "TEXT NOT NULL DEFAULT 'Crosswalk A'",
@@ -180,8 +138,6 @@ def init_db() -> None:
         }.items():
             if col not in cam_cols:
                 conn.execute(f"ALTER TABLE cameras ADD COLUMN {col} {col_type}")
-
-        # ── default admin (once) ─────────────────────────────────────────────
         row = conn.execute(
             "SELECT id FROM admin_users WHERE username = ?", ("admin",)
         ).fetchone()
@@ -190,8 +146,6 @@ def init_db() -> None:
                 "INSERT INTO admin_users (username, password_hash) VALUES (?, ?)",
                 ("admin", generate_password_hash("admin1234")),
             )
-
-        # ── default cameras (once) ───────────────────────────────────────────
         cam_count = conn.execute("SELECT COUNT(*) FROM cameras").fetchone()[0]
         if cam_count == 0:
             conn.executemany(
@@ -208,12 +162,6 @@ def init_db() -> None:
                     ("cam3", "Camera 3 - Exit", "0", "Videos/v3.mp4", "Exit Lane", 41.2961, 69.2794, "exit, south"),
                 ],
             )
-
-
-# ---------------------------------------------------------------------------
-# Audit logging helper
-# ---------------------------------------------------------------------------
-
 def log_audit(action: str, target: str = "", username: str = "system") -> None:
     with db_connection() as conn:
         conn.execute(

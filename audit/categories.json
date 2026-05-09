@@ -1,0 +1,41 @@
+{
+  "detection": {
+    "missed_pedestrian": "Person clearly visible, not detected",
+    "missed_vehicle": "Vehicle clearly visible, not detected",
+    "misclassified_motorbike_as_car": "Two-wheeler labelled as car/truck",
+    "misclassified_scooter_as_pedestrian": "E-scooter rider classed as pedestrian",
+    "phantom_object": "Bounding box on shadow, reflection, sign, etc.",
+    "low_confidence_drop": "Object detected but below threshold"
+  },
+  "tracking": {
+    "id_switch": "Same physical object, two different IDs",
+    "id_reuse": "Different physical objects given same ID",
+    "lost_during_occlusion": "Track ended when object was briefly occluded",
+    "phantom_persistence": "Track continued after object actually left frame"
+  },
+  "stabilisation": {
+    "homography_failure": "ORB couldn't find enough matches; polygon drifted",
+    "overcorrection": "ORB matched on moving object; polygon shifted incorrectly"
+  },
+  "logic": {
+    "direction_misread": "Pedestrian UP/DOWN labelled wrong",
+    "direction_flapping": "Direction oscillated rapidly during steady walk",
+    "clearing_too_early": "CLEARING fired before pedestrian was actually safe",
+    "clearing_too_late": "Pedestrian clearly safe but still in CROSSING",
+    "violator_already_passed": "Vehicle was behind pedestrian, still flagged",
+    "stationary_pedestrian_triggered": "Standing pedestrian (e.g. waiting on kerb) triggered violation"
+  },
+  "ocr": {
+    "no_plate_detected": "Clear plate visible, LP detector missed it",
+    "misread_characters": "Plate detected, OCR read wrong characters",
+    "wrong_plate_selected": "Multi-frame buffer chose suboptimal sample"
+  },
+  "environmental": {
+    "sun_glare": "Glare into camera caused failure",
+    "harsh_shadows": "Strong shadows confused detection",
+    "rain_blur": "Rain on lens or motion blur",
+    "occlusion_by_vehicle": "Bus/truck blocked relevant view",
+    "low_light": "Insufficient illumination (dusk/night)",
+    "wet_road_reflection": "Reflection on wet road created phantom"
+  }
+}

@@ -1,16 +1,11 @@
 from __future__ import annotations
-
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from uuid import uuid4
-
-
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
-
-
 def _to_builtin(value: Any) -> Any:
     if isinstance(value, dict):
         return {str(key): _to_builtin(inner) for key, inner in value.items()}
@@ -22,8 +17,6 @@ def _to_builtin(value: Any) -> Any:
         except Exception:
             return str(value)
     return value
-
-
 @dataclass(slots=True)
 class ViolationTrigger:
     vehicle_id: int
@@ -31,8 +24,6 @@ class ViolationTrigger:
     pedestrian_direction: str
     pedestrian_zone: Optional[str]
     reason: str
-
-
 @dataclass(slots=True)
 class ViolationEvent:
     violation_id: str
@@ -52,7 +43,6 @@ class ViolationEvent:
     vehicle_speed_estimate: Optional[float] = None
     plate_number: Optional[str] = None
     plate_crop_path: Optional[str] = None
-
     @classmethod
     def create(
         cls,
@@ -91,13 +81,10 @@ class ViolationEvent:
             plate_number=plate_number,
             plate_crop_path=plate_crop_path,
         )
-
     def to_metadata(self) -> Dict[str, Any]:
         payload = asdict(self)
         payload["timestamp"] = self.timestamp.isoformat()
         return _to_builtin(payload)
-
-
 @dataclass(slots=True)
 class EvidenceBundle:
     event: ViolationEvent
@@ -105,24 +92,18 @@ class EvidenceBundle:
     vehicle_crop_path: Path
     vehicle_crop_bbox: Tuple[int, int, int, int]
     frame_shape: Tuple[int, int, int]
-
-
 @dataclass(slots=True)
 class PlateDetectionResult:
     plate_bbox: Optional[Tuple[int, int, int, int]]
     plate_crop_path: Optional[Path]
     source: str
     confidence: float
-
-
 @dataclass(slots=True)
 class OCRResult:
     plate_text: Optional[str]
     confidence: float
     raw_text: str = ""
     accepted: bool = False
-
-
 @dataclass(slots=True)
 class ReportPayload:
     violation_id: str
@@ -136,15 +117,11 @@ class ReportPayload:
     fine_amount: float
     plate_crop_path: Optional[str] = None
     snapshot_path: Optional[str] = None
-
-
 @dataclass(slots=True)
 class ReportResult:
     report_json: Dict[str, Any]
     report_text: str
     invoice_path: Optional[Path] = None
-
-
 @dataclass(slots=True)
 class InvoiceRecordData:
     violation_id: str

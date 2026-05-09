@@ -1,25 +1,20 @@
 from __future__ import annotations
-
 import json
 from dataclasses import asdict
 from typing import Any, Dict
-
 from config import AppSettings
 from schemas import ReportPayload, ReportResult
-
-
 class LLMReportService:
     def __init__(self, settings: AppSettings):
         self.settings = settings
         self._client = None
         if settings.models.llm_provider.lower() == "anthropic":
             try:
-                import anthropic  # type: ignore
+                import anthropic
                 api_key = settings.models.anthropic_api_key or None
                 self._client = anthropic.Anthropic(api_key=api_key)
             except Exception:
                 self._client = None
-
     def build_prompt(self, payload: ReportPayload) -> str:
         return (
             "Generate a formal traffic violation package in JSON with keys "
@@ -28,7 +23,6 @@ class LLMReportService:
             "Return ONLY valid JSON — no markdown, no code fences. "
             f"Input: {json.dumps(asdict(payload), ensure_ascii=True)}"
         )
-
     def generate(self, payload: ReportPayload) -> ReportResult:
         if self._client is not None:
             try:
@@ -50,11 +44,9 @@ class LLMReportService:
                     }
                 return ReportResult(report_json=structured, report_text=text)
             except Exception:
-                pass  # fall through to mock on any API error
-
+                pass
         structured = self._mock_response(payload)
         return ReportResult(report_json=structured, report_text=structured["report"])
-
     def _mock_response(self, payload: ReportPayload) -> Dict[str, Any]:
         report = (
             f"Violation {payload.violation_id} recorded on {payload.timestamp} for vehicle "

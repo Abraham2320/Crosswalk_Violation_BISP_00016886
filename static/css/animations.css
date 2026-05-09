@@ -1,9 +1,6 @@
-/* ============================================================
-   animations.css — Global animation & motion system
-   Crosswalk Enforcement System — inspired by OneText SaaS UI
-   ============================================================ */
 
-/* ── Keyframe library ──────────────────────────────────────── */
+
+
 
 @keyframes fadeUp {
   from { opacity: 0; transform: translateY(22px); }
@@ -63,7 +60,7 @@
   66%       { transform: rotate(240deg) scale(0.98); }
 }
 
-/* ── Ambient background rings (injected in base.html) ────── */
+
 
 .ambient-bg {
   position: fixed;
@@ -116,7 +113,7 @@
   animation: orbitSpin 45s linear infinite;
 }
 
-/* Orbital dot on ring-1 */
+
 .ambient-dot {
   position: absolute;
   width: 6px; height: 6px;
@@ -128,13 +125,13 @@
   opacity: 0.5;
 }
 
-/* ── Nav bar entry ─────────────────────────────────────────── */
+
 
 .nav-bar {
   animation: navBarIn 0.45s cubic-bezier(0.22,1,0.36,1) both;
 }
 
-/* ── Page content entry ────────────────────────────────────── */
+
 
 .page-container {
   animation: fadeIn 0.3s ease 0.08s both;
@@ -144,13 +141,13 @@
   animation: fadeUp 0.38s cubic-bezier(0.22,1,0.36,1) 0.06s both;
 }
 
-/* ── Filter bar ────────────────────────────────────────────── */
+
 
 .filter-bar {
   animation: fadeUp 0.38s cubic-bezier(0.22,1,0.36,1) 0.1s both;
 }
 
-/* ── Stat card stagger ─────────────────────────────────────── */
+
 
 .grid-4 > .stat-card,
 .grid-3 > .stat-card,
@@ -163,13 +160,13 @@
 .grid-4 > *:nth-child(3), .grid-3 > *:nth-child(3) { animation-delay: 0.18s; }
 .grid-4 > *:nth-child(4)                            { animation-delay: 0.24s; }
 
-/* ── Main card entry ──────────────────────────────────────── */
+
 
 .card {
   animation: scaleIn 0.40s cubic-bezier(0.22,1,0.36,1) 0.1s both;
 }
 
-/* ── Table row stagger ────────────────────────────────────── */
+
 
 .data-table tbody tr {
   animation: fadeUp 0.3s ease both;
@@ -186,19 +183,19 @@
 .data-table tbody tr:nth-child(10)   { animation-delay: 0.27s; }
 .data-table tbody tr:nth-child(n+11) { animation-delay: 0.30s; }
 
-/* ── Violation log entries ────────────────────────────────── */
+
 
 .log-entry {
   animation: slideLeft 0.32s cubic-bezier(0.22,1,0.36,1) both;
 }
 
-/* ── Login card ───────────────────────────────────────────── */
+
 
 .login-card {
   animation: scaleIn 0.55s cubic-bezier(0.22,1,0.36,1) both;
 }
 
-/* ── Portal animations ────────────────────────────────────── */
+
 
 .portal-page .portal-card {
   animation: scaleIn 0.48s cubic-bezier(0.22,1,0.36,1) 0.1s both;
@@ -215,13 +212,13 @@
   animation: fadeUp 0.45s cubic-bezier(0.22,1,0.36,1) 0.3s both;
 }
 
-/* ── Violation cards (portal results) ────────────────────── */
+
 
 .violation-card.visible {
   animation: fadeUp 0.4s cubic-bezier(0.22,1,0.36,1) both;
 }
 
-/* ── Scan corner bracket classes (injected via JS) ────────── */
+
 
 .sc-corner {
   position: absolute;
@@ -273,14 +270,14 @@
   box-shadow: -2px 2px 8px rgba(245,166,35,0.15);
 }
 
-/* Hover: brackets become fully opaque */
+
 .stat-card:hover .sc-corner,
 .login-card:hover .sc-corner,
 .snapshot-container:hover .sc-corner {
   opacity: 1 !important;
 }
 
-/* ── Scan line (dynamically appended to .video-wrap.detecting) */
+
 
 .scan-line {
   position: absolute;
@@ -300,7 +297,7 @@
   top: 0;
 }
 
-/* ── Circle-arrow button (OneText-style navigation CTA) ───── */
+
 
 .btn-circle-link {
   display: inline-flex;
@@ -341,13 +338,13 @@
   box-shadow: 0 0 16px rgba(245,166,35,0.5);
 }
 
-/* ── Stat value number reveal ──────────────────────────────── */
+
 
 .stat-value {
   animation: numberReveal 0.5s cubic-bezier(0.22,1,0.36,1) 0.3s both;
 }
 
-/* ── Detail layout stagger ────────────────────────────────── */
+
 
 .detail-layout > *:nth-child(1) {
   animation: fadeUp 0.4s cubic-bezier(0.22,1,0.36,1) 0.1s both;
@@ -356,7 +353,7 @@
   animation: fadeUp 0.4s cubic-bezier(0.22,1,0.36,1) 0.18s both;
 }
 
-/* ── Heatmap cells animate in ─────────────────────────────── */
+
 
 .heatmap-cell {
   animation: scaleIn 0.25s ease both;
@@ -368,19 +365,19 @@
 .heatmap-grid > *:nth-child(6n+5) { animation-delay: 0.10s; }
 .heatmap-grid > *:nth-child(6n+6) { animation-delay: 0.12s; }
 
-/* ── Glow pulse on stat cards ─────────────────────────────── */
+
 
 .stat-card {
   animation: glowPulse 4s ease-in-out infinite;
 }
 
-/* ── Snapshot image reveal with scan effect ───────────────── */
+
 
 .snapshot-img {
   animation: fadeIn 0.6s ease 0.2s both;
 }
 
-/* ── Inline/live stats slide-in ───────────────────────────── */
+
 
 .qs-item {
   animation: fadeUp 0.4s cubic-bezier(0.22,1,0.36,1) both;
@@ -398,7 +395,7 @@
 .module-strip > .module-item:nth-child(4) { animation-delay: 0.20s; }
 .module-strip > .module-item:nth-child(5) { animation-delay: 0.25s; }
 
-/* ── Respect prefers-reduced-motion ───────────────────────── */
+
 
 @media (prefers-reduced-motion: reduce) {
   *,

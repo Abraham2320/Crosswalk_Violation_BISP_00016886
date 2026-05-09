@@ -1,20 +1,12 @@
 from __future__ import annotations
-
 from fastapi import APIRouter, Depends, HTTPException, status
-
 from api.dependencies import get_repository
 from api.models.schemas import VehicleResponse
 from api.services.violation_service import ViolationService
 from storage.database import ViolationRepository
-
-
 router = APIRouter(prefix="/vehicles", tags=["vehicles"])
-
-
 def get_service(repository: ViolationRepository = Depends(get_repository)) -> ViolationService:
     return ViolationService(repository)
-
-
 @router.get("/{plate_number}", response_model=VehicleResponse)
 def get_vehicle(
     plate_number: str,

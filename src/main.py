@@ -1,18 +1,15 @@
 from __future__ import annotations
-
 import argparse
+import os
 import queue as _queue
 import re
 import threading
 import time
-import types
 from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Dict, List, Optional, Set
-
 import cv2
 import numpy as np
-
 from config import (
     CONF_THRESHOLD,
     DETECTION_CLASSES,
@@ -21,20 +18,20 @@ from config import (
     VIDEO_PATH,
     settings,
 )
-
-# ---------------------------------------------------------------------------
-# Project root — resolved relative to this file (src/../)
-# ---------------------------------------------------------------------------
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 _SNAPSHOTS_DIR = _PROJECT_ROOT / "static" / "snapshots"
-
 from detector.tracker import (
     IDMerger,
     PedestrianTrack,
     VehicleTrack,
     apply_cross_class_nms,
 )
-from detector.yolo_detector import YOLODetector
+from detector.segmentation import (
+    SegmentedYOLODetector,
+    VEHICLE_CLASS_NAMES,
+    class_label,
+    class_color,
+)
 from geometry.crosswalk import CrosswalkZone
 from geometry.polygon_editor import PolygonEditor
 from logic.violation import (
@@ -49,73 +46,46 @@ from schemas import ViolationEvent
 from services.pipeline import EnforcementPipeline
 from alpr.detector import LicensePlateDetector
 from OCR.engine import OCREngine
-from vision.draw import draw_box
+from vision.draw import _put_label, draw_segmentation_mask, draw_all_masks
 from vision.stabilizer import VideoStabilizer
-
-
 WINDOW_NAME = "Crosswalk Violation System"
-
-# Colour constants (BGR)
 _AMBER_BGR  = (11, 158, 245)
 _RED_BGR    = (0, 0, 239)
 _BLUE_BGR   = (255, 0, 0)
-_ORANGE_BGR = (0, 165, 255)    # wrong-direction bounding box colour
+_ORANGE_BGR = (0, 165, 255)
+DIRECTION_THRESHOLD: int = 15
+ROAD_Y_RANGE: tuple = (350, 1080)
+MISSING_FRAMES_FINALIZE: int = 15
+OCR_RETRY_INTERVAL: int = 5
+OCR_HIGH_CONF_THRESHOLD: float = 0.75
+OCR_MIN_ACCEPT_CONF: float = 0.35
+ENABLE_PLATE_DETECTOR: bool = False
+ENABLE_DEFERRED_OCR: bool   = False
+ENABLE_WRONG_DIR: bool      = True
 
-# ---------------------------------------------------------------------------
-# Directional violation constants — calibrate per camera installation
-# ---------------------------------------------------------------------------
-# Minimum X-pixel displacement across the 8-frame history window to confirm movement.
-DIRECTION_THRESHOLD = 15
-# Centroid Y band considered active road area; vehicles whose centroid falls
-# outside this range are treated as parked / off-road and are excluded from
-# wrong-direction detection.  Adjust to match your camera's road region.
-ROAD_Y_RANGE = (350, 1080)   # (y_min, y_max)
+def _apply_runtime_settings() -> None:
+    global DIRECTION_THRESHOLD, ROAD_Y_RANGE, MISSING_FRAMES_FINALIZE
+    global OCR_RETRY_INTERVAL, OCR_HIGH_CONF_THRESHOLD, OCR_MIN_ACCEPT_CONF
+    global ENABLE_PLATE_DETECTOR, ENABLE_DEFERRED_OCR, ENABLE_WRONG_DIR
+    rt = settings.runtime
+    DIRECTION_THRESHOLD      = rt.direction_threshold
+    ROAD_Y_RANGE             = (rt.road_y_min, rt.road_y_max)
+    MISSING_FRAMES_FINALIZE  = rt.missing_frames_finalize
+    OCR_RETRY_INTERVAL       = rt.ocr_retry_interval
+    OCR_HIGH_CONF_THRESHOLD  = rt.ocr_high_conf_threshold
+    OCR_MIN_ACCEPT_CONF      = rt.ocr_min_accept_conf
+    ENABLE_PLATE_DETECTOR    = rt.enable_plate_detector
+    ENABLE_DEFERRED_OCR      = rt.enable_deferred_ocr
+    ENABLE_WRONG_DIR         = rt.enable_wrong_dir
 
-# ---------------------------------------------------------------------------
-# Deferred plate-capture constants
-# ---------------------------------------------------------------------------
-# Consecutive absent-detection frames before a violation record is finalised.
-MISSING_FRAMES_FINALIZE = 15
-# Frames between successive deferred OCR attempts for the same vehicle.
-OCR_RETRY_INTERVAL = 5
-# Immediately persist the plate at this confidence level.
-OCR_HIGH_CONF_THRESHOLD = 0.75
-# Minimum confidence to store any plate reading (below this → keep trying).
-OCR_MIN_ACCEPT_CONF = 0.35
-
-# ---------------------------------------------------------------------------
-# Performance feature flags — set to False to disable for speed testing
-# ---------------------------------------------------------------------------
-# Heaviest: runs a dedicated plate-YOLO on every visible vehicle every frame.
-ENABLE_PLATE_DETECTOR = False
-# Heavy: EasyOCR with 3-variant inference + fastNlMeansDenoising per attempt.
-# Runs every OCR_RETRY_INTERVAL frames per violated vehicle after it exits zone.
-ENABLE_DEFERRED_OCR   = False
-# Moderate: one-shot OCR for vehicles that have never violated (runs once per track).
-ENABLE_REGULAR_OCR    = False
-# Light: pure numpy math on centroid history — essentially free, but toggleable.
-ENABLE_WRONG_DIR      = True
-
-# Protects concurrent writes to active_violations entries from OCR threads.
+_apply_runtime_settings()
 _violations_lock = threading.Lock()
-
-# Plate vote accumulation — indexed by track_id
 _plate_votes: defaultdict = defaultdict(list)
 _plate_votes_lock = threading.Lock()
-
-
 def submit_plate_reading(track_id: int, text: str, conf: float) -> None:
-    """Record a single OCR reading for later majority-vote selection."""
     with _plate_votes_lock:
         _plate_votes[track_id].append((text, conf))
-
-
 def get_best_plate(track_id: int):
-    """
-    Return (best_text, vote_count).
-    Picks the most-frequent text among readings with ≥2 votes;
-    falls back to highest-confidence single reading when no majority exists.
-    """
     with _plate_votes_lock:
         readings = list(_plate_votes.get(track_id, []))
     if not readings:
@@ -126,29 +96,38 @@ def get_best_plate(track_id: int):
         return top_text, top_count
     best_text, _ = max(readings, key=lambda x: x[1])
     return best_text, 1
-
-
 def clear_plate_votes(track_id: int) -> None:
-    """Remove accumulated votes for a track (called when track is cleaned up)."""
     with _plate_votes_lock:
         _plate_votes.pop(track_id, None)
 
 
-# ---------------------------------------------------------------------------
-# Background YOLO worker
-# ---------------------------------------------------------------------------
+def _remap_masks(
+    filtered_boxes: np.ndarray,
+    raw_boxes: np.ndarray,
+    raw_masks: list,
+) -> list:
+    n = len(filtered_boxes)
+    if n == 0 or not raw_masks:
+        return [None] * n
+    out: list = []
+    for fb in filtered_boxes:
+        found = None
+        for j, rb in enumerate(raw_boxes):
+            if j < len(raw_masks) and np.allclose(fb, rb, atol=1.0):
+                found = raw_masks[j]
+                break
+        out.append(found)
+    return out
+
 
 class _InferenceWorker:
-    """Run stabilization + YOLO inference in a background daemon thread."""
-
-    def __init__(self, detector: YOLODetector, stabilizer=None) -> None:
+    def __init__(self, detector: SegmentedYOLODetector, stabilizer=None) -> None:
         self._detector = detector
         self._stabilizer = stabilizer
         self._in: _queue.Queue = _queue.Queue(maxsize=1)
         self._out: _queue.Queue = _queue.Queue(maxsize=1)
         self._thread = threading.Thread(target=self._run, daemon=True, name="yolo-worker")
         self._thread.start()
-
     def _run(self) -> None:
         while True:
             item = self._in.get()
@@ -164,84 +143,64 @@ class _InferenceWorker:
             else:
                 stable_frame = frame
             result = self._detector.detect(stable_frame)
+            raw_boxes: np.ndarray = np.empty((0, 4), dtype=np.float32)
+            raw_seg_masks: list = []
+            if result and result[0].boxes.id is not None:
+                raw_boxes = result[0].boxes.xyxy.cpu().numpy()
+                if len(raw_boxes) > 0:
+                    raw_seg_masks = self._detector.segment_frame(stable_frame, raw_boxes)
             try:
                 self._out.get_nowait()
             except _queue.Empty:
                 pass
-            self._out.put((stable_frame, result))
-
+            self._out.put((stable_frame, result, raw_boxes, raw_seg_masks))
     def submit(self, frame: np.ndarray, frame_index: int) -> None:
         try:
             self._in.put_nowait((frame.copy(), frame_index))
         except _queue.Full:
             pass
-
     def get_result(self):
         try:
             return self._out.get_nowait()
         except _queue.Empty:
             return None
-
     def stop(self) -> None:
         try:
             self._in.put_nowait(None)
         except _queue.Full:
             pass
         self._thread.join(timeout=3.0)
-
-
-# ---------------------------------------------------------------------------
-# Helper utilities
-# ---------------------------------------------------------------------------
-
 def clean_plate_text(raw: str) -> str:
-    """Strip non-alphanumeric characters; returns empty string if fewer than 4 chars."""
     text = re.sub(r"[^A-Z0-9]", "", raw.upper().strip())
     return text if len(text) >= 4 else ""
-
-
 def _compute_vehicle_direction(vt: VehicleTrack) -> str:
-    """Return 'FORWARD', 'REVERSE', or 'STATIONARY' from the last 8 centroid positions."""
     positions = list(vt.centroid_history)
     if len(positions) < 8:
         return "STATIONARY"
     recent = positions[-8:]
     dx = recent[-1][0] - recent[0][0]
-    # Gate: require meaningful per-frame X motion so parked/facing cars don't trigger.
-    # Detection jitter on a stationary car is typically < 3px/frame; real movement > 5px/frame.
     avg_x_motion = sum(
         abs(recent[i + 1][0] - recent[i][0]) for i in range(len(recent) - 1)
     ) / (len(recent) - 1)
-    if avg_x_motion < 5.0:
+    if avg_x_motion < 10.0:
         return "STATIONARY"
     if dx < -DIRECTION_THRESHOLD:
         return "REVERSE"
     if dx > DIRECTION_THRESHOLD:
         return "FORWARD"
     return "STATIONARY"
-
-
 def _get_plate_region(
     frame: np.ndarray,
     box,
     plate_detector: Optional[LicensePlateDetector],
 ) -> Optional[np.ndarray]:
-    """
-    Return the best plate crop for OCR:
-    - If a plate sub-detector is available, use its detected bounding box.
-    - Otherwise fall back to the bottom 25% of the vehicle bounding box
-      (most likely plate location from a rear/front-facing camera).
-    Returns None if the region is too small (< 80x40 px minimum size gate).
-    """
     x1, y1, x2, y2 = int(box[0]), int(box[1]), int(box[2]), int(box[3])
     fh, fw = frame.shape[:2]
     x1c, y1c = max(0, x1), max(0, y1)
     x2c, y2c = min(fw - 1, x2), min(fh - 1, y2)
     bw, bh = x2c - x1c, y2c - y1c
-
     if bw < 80 or bh < 40:
         return None
-
     if plate_detector is not None and bw >= 32 and bh >= 32:
         try:
             crop = frame[y1c:y2c, x1c:x2c]
@@ -253,17 +212,9 @@ def _get_plate_region(
                     return region
         except Exception:
             pass
-
-    # Fallback: bottom 25% of vehicle bbox
     plate_top = y2c - max(int(bh * 0.25), 20)
     region = frame[plate_top:y2c, x1c:x2c]
     return region if region.size > 0 else None
-
-
-# ---------------------------------------------------------------------------
-# Snapshot saving
-# ---------------------------------------------------------------------------
-
 def _save_violation_snapshot(
     frame: np.ndarray,
     violation_box,
@@ -275,22 +226,17 @@ def _save_violation_snapshot(
     try:
         snap = frame.copy()
         _, w  = snap.shape[:2]
-
         overlay = snap.copy()
         cv2.rectangle(overlay, (0, 0), (w, 40), _RED_BGR, -1)
         cv2.addWeighted(overlay, 0.6, snap, 0.4, 0, snap)
-
         for b, c in zip(all_boxes, all_classes):
             x1, y1, x2, y2 = [int(v) for v in b]
             color = _BLUE_BGR if int(c) == 0 else (0, 0, 255)
             cv2.rectangle(snap, (x1, y1), (x2, y2), color, 2)
-
         vx1, vy1, vx2, vy2 = [int(v) for v in violation_box]
         cv2.rectangle(snap, (vx1, vy1), (vx2, vy2), (0, 0, 255), 3)
-
         poly_pts = np.array(polygon, dtype=np.int32)
         cv2.polylines(snap, [poly_pts], True, _AMBER_BGR, 2)
-
         ts = event.timestamp.strftime("%Y-%m-%d %H:%M:%S")
         lines = [
             "VIOLATION DETECTED",
@@ -304,7 +250,6 @@ def _save_violation_snapshot(
             cv2.putText(snap, line, (8, y_off),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.42, (255, 255, 255), 1, cv2.LINE_AA)
             y_off += 16
-
         _SNAPSHOTS_DIR.mkdir(parents=True, exist_ok=True)
         fname     = f"snapshot_{event.violation_id}_{event.frame_index}.jpg"
         save_path = _SNAPSHOTS_DIR / fname
@@ -313,12 +258,6 @@ def _save_violation_snapshot(
     except Exception as exc:
         print(f"[WARN] Failed to save violation snapshot: {exc}")
         return None
-
-
-# ---------------------------------------------------------------------------
-# Track helpers
-# ---------------------------------------------------------------------------
-
 def _ped_direction(ped_track) -> str:
     if not ped_track.velocity_history:
         return "STATIC"
@@ -328,16 +267,12 @@ def _ped_direction(ped_track) -> str:
     if total_dy < -5:
         return "UP"
     return "STATIC"
-
-
 def _estimate_speed(vt: VehicleTrack) -> Optional[float]:
     history = getattr(vt, "pre_entry_velocity_snapshot", None)
     if not history:
         return None
     magnitudes = [(dx ** 2 + dy ** 2) ** 0.5 for dx, dy in history]
     return round(sum(magnitudes) / len(magnitudes), 2)
-
-
 def build_event(
     frame_index: int,
     box,
@@ -364,32 +299,6 @@ def build_event(
         vehicle_speed_estimate=_estimate_speed(veh_track) if veh_track else None,
         plate_number=plate_number,
     )
-
-
-# ---------------------------------------------------------------------------
-# OCR worker functions
-# ---------------------------------------------------------------------------
-
-def _run_ocr_for_vehicle(
-    ocr_engine: OCREngine,
-    obj_id: int,
-    plate_crop: np.ndarray,
-    plate_text_cache: Dict[int, str],
-    plate_ocr_pending: Set[int],
-) -> None:
-    """Standard one-shot OCR for non-violated vehicles."""
-    try:
-        result = ocr_engine.recognize_array(plate_crop)
-        if result.plate_text:
-            plate_text_cache[obj_id] = result.plate_text
-        elif result.raw_text and len(result.raw_text.strip()) >= 3:
-            plate_text_cache[obj_id] = f"~{result.raw_text.strip()[:10]}"
-    except Exception:
-        pass
-    finally:
-        plate_ocr_pending.discard(obj_id)
-
-
 def _run_deferred_ocr(
     ocr_engine: OCREngine,
     track_id: int,
@@ -398,19 +307,11 @@ def _run_deferred_ocr(
     plate_ocr_pending: Set[int],
     pipeline: EnforcementPipeline,
 ) -> None:
-    """
-    Deferred OCR for vehicles in active_violations.  Keeps trying after the
-    car has exited the crosswalk zone (when the plate becomes visible).
-    On a high-confidence reading the violation record is updated immediately;
-    on track loss the best reading is persisted by _finalise_active_violation.
-    """
     try:
         result = ocr_engine.recognize_array(plate_crop)
-
         raw_clean = clean_plate_text(result.raw_text or "")
         best_text = result.plate_text or (raw_clean if len(raw_clean) >= 4 else None)
         conf = result.confidence
-
         if best_text and conf >= OCR_MIN_ACCEPT_CONF:
             submit_plate_reading(track_id, best_text, conf)
             with _violations_lock:
@@ -420,8 +321,6 @@ def _run_deferred_ocr(
                 if conf > av["best_confidence"]:
                     av["best_plate"]      = best_text
                     av["best_confidence"] = conf
-
-                # Persist immediately when confidence is high enough
                 if conf >= OCR_HIGH_CONF_THRESHOLD and not av["plate_saved"]:
                     av["plate_saved"] = True
                     future       = av.get("future")
@@ -436,14 +335,11 @@ def _run_deferred_ocr(
         pass
     finally:
         plate_ocr_pending.discard(track_id)
-
-
 def _finalise_active_violation(
     track_id: int,
     av: dict,
     pipeline: EnforcementPipeline,
 ) -> None:
-    """Persist the best plate reading (or UNREAD) when a track is definitively lost."""
     if av["plate_saved"]:
         return
     voted_plate, _ = get_best_plate(track_id)
@@ -457,18 +353,8 @@ def _finalise_active_violation(
             pass
     pipeline.update_violation_plate(av["violation_id"], plate, conf)
     av["plate_saved"] = True
-
-
-# ---------------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------------
-
 def main():
     parser = argparse.ArgumentParser(description="Crosswalk Violation System")
-    parser.add_argument(
-        "--chatbot", action="store_true",
-        help="Launch interactive chatbot instead of processing video",
-    )
     parser.add_argument(
         "--no-stabilize", action="store_true",
         help="Disable video stabilisation",
@@ -478,35 +364,20 @@ def main():
         help="Path to video file (overrides VIDEO_PATH env / config default)",
     )
     args = parser.parse_args()
-
-    if args.chatbot:
-        from chatbot import run_chatbot
-        run_chatbot()
-        return
-
-    # Stabilizer disabled until a faster machine is available — it runs optical
-    # flow on every frame inside the YOLO worker and is the second-largest bottleneck.
-    enable_stabilization = False
+    enable_stabilization = not args.no_stabilize
     video_source = args.video if args.video else VIDEO_PATH
-
     print(f"[INFO] Starting pipeline with source: {video_source}")
     print(f"[INFO] Model: {MODEL_PATH} | conf={CONF_THRESHOLD} | imgsz={IMG_SIZE}")
-
     cap = cv2.VideoCapture(video_source)
     if not cap.isOpened():
         raise RuntimeError("Cannot open video")
-
-    # Frame pacing — read the source FPS so display matches real-time speed.
-    # Falls back to 30 fps for live cameras that report 0.
     _src_fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
     _frame_delay = 1.0 / _src_fps
     _last_display_t = 0.0
-
     cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL)
     editor = PolygonEditor(WINDOW_NAME)
     polygon_loaded = editor.load()
     cv2.setMouseCallback(WINDOW_NAME, editor.mouse_callback)
-
     if not polygon_loaded:
         print("Calibration mode:")
         print("LEFT click -> add polygon point")
@@ -521,79 +392,64 @@ def main():
             if editor.done:
                 editor.save()
                 break
-
     polygon = editor.get_polygon()
     if polygon is None:
         raise RuntimeError("Polygon missing or invalid")
-
     np_polygon = np.array(polygon, dtype=np.float32)
     crosswalk  = CrosswalkZone(polygon)
-
     pw = float(np_polygon[:, 0].max() - np_polygon[:, 0].min())
     ph = float(np_polygon[:, 1].max() - np_polygon[:, 1].min())
     default_approach_axis   = "from_bottom" if ph >= pw else "from_left"
     default_polygon_midline = get_polygon_midline(np_polygon, default_approach_axis)
-
-    # ── Parallel model loading ────────────────────────────────────────────────
-    # YOLO (with GPU warm-up) loads on the main thread.
-    # EasyOCR and the plate-detector YOLO load concurrently so neither blocks.
     _plate_box: List[Optional[LicensePlateDetector]] = [None]
     _ocr_box:   List[Optional[OCREngine]]            = [None]
-
     def _load_plate():
         try:
             _plate_box[0] = LicensePlateDetector(settings)
         except Exception:
             pass
-
     def _load_ocr():
         try:
             _ocr_box[0] = OCREngine(settings)
         except Exception:
             pass
-
     _plate_thread = threading.Thread(target=_load_plate, daemon=True)
     _ocr_thread   = threading.Thread(target=_load_ocr,   daemon=True)
     _plate_thread.start()
     _ocr_thread.start()
-
-    # YOLO loads here; warm-up happens inside YOLODetector.__init__
-    detector   = YOLODetector(MODEL_PATH, DETECTION_CLASSES, CONF_THRESHOLD, IMG_SIZE)
+    detector = SegmentedYOLODetector(
+        model_path=MODEL_PATH,
+        seg_model_path=(
+            settings.segmentation.seg_model_path
+            if settings.segmentation.enabled else ""
+        ),
+        classes=DETECTION_CLASSES,
+        conf=CONF_THRESHOLD,
+        imgsz=IMG_SIZE,
+        run_every_n_frames=settings.segmentation.run_every_n_frames,
+    )
     stabilizer = VideoStabilizer() if enable_stabilization else None
     worker     = _InferenceWorker(detector, stabilizer)
     id_merger  = IDMerger(proximity_px=40.0, min_frames=3)
     enforcement_pipeline = EnforcementPipeline(settings)
-
     _plate_thread.join()
     _ocr_thread.join()
     plate_detector = _plate_box[0]
     ocr_engine     = _ocr_box[0]
-
-    # ── Per-track state ───────────────────────────────────────────────────────
     ped_tracks: Dict[int, PedestrianTrack] = {}
     veh_tracks: Dict[int, VehicleTrack]    = {}
     vehicles_in_polygon: Set[int]   = set()
     peds_in_polygon: Set[int]       = set()
     active_violation_cars: Set[int] = set()
     triggered_pairs: Set[tuple]     = set()
-    _cached_nms_data                = None
+    _cached_nms_data: Optional[tuple] = None
     _last_stable_frame: Optional[np.ndarray] = None
-
     plate_bbox_cache: Dict[int, tuple] = {}
     plate_text_cache: Dict[int, str]   = {}
     plate_ocr_pending: Set[int]        = set()
-
-    # Wrong-direction tracking
     wrong_dir_flagged: Set[int] = set()
-
-    # Deferred plate capture: track_id → violation meta dict
-    # Each entry: {violation_id, violation_type, triggered_at_frame,
-    #              best_plate, best_confidence, plate_saved,
-    #              frames_missing, last_seen_frame, last_ocr_frame, future}
     active_violations: Dict[int, dict] = {}
-
     frame_index = 0
-
     try:
         while True:
             ret, frame = cap.read()
@@ -604,47 +460,39 @@ def main():
                     )
                 print(f"[INFO] End of video reached after {frame_index} frames.")
                 break
-
             frame_index += 1
-
             worker.submit(frame, frame_index)
             worker_result = worker.get_result()
+            _raw_boxes_for_seg: np.ndarray = np.empty((0, 4), dtype=np.float32)
+            _raw_seg_masks: list = []
             if worker_result is not None:
-                frame, results = worker_result
+                frame, results, _raw_boxes_for_seg, _raw_seg_masks = worker_result
                 _last_stable_frame = frame
             else:
-                # Reuse the last analyzed frame so cached boxes stay aligned with the image.
                 if _last_stable_frame is not None:
                     frame = _last_stable_frame.copy()
                 results = None
-
-            # ── Zone overlay — yellow outline ────────────────────────────────
             cv2.polylines(frame, [np.array(polygon, dtype=np.int32)], True, (0, 255, 255), 2)
-
             if stabilizer is not None:
                 stab_label = "Stabilised" if stabilizer.is_stable else "Unstable"
                 stab_color = (0, 255, 0) if stabilizer.is_stable else (0, 0, 255)
                 cv2.putText(frame, stab_label, (frame.shape[1] - 160, 28),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.7, stab_color, 2)
-
             cv2.putText(
                 frame,
-                f"P:{len(peds_in_polygon)} V:{len(vehicles_in_polygon)}",
+                f"P:{len(ped_tracks)} V:{len(vehicles_in_polygon)}",
                 (16, 28),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2,
             )
-
             if results and results[0].boxes.id is not None:
                 boxes   = results[0].boxes.xyxy.cpu().numpy()
                 classes = results[0].boxes.cls.cpu().numpy().astype(int)
                 ids     = results[0].boxes.id.cpu().numpy().astype(int)
                 confs   = results[0].boxes.conf.cpu().numpy()
-
                 boxes, classes, ids, confs = apply_cross_class_nms(
                     boxes, classes, ids, confs, iou_threshold=0.35
                 )
                 ids = id_merger.update(ids, boxes)
-
                 if len(boxes) > 0:
                     areas      = (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
                     is_vehicle = classes != 0
@@ -655,22 +503,24 @@ def main():
                     classes    = classes[keep]
                     ids        = ids[keep]
                     confs      = confs[keep]
-
-                _cached_nms_data = (boxes, classes, ids)
-
+                seg_masks = _remap_masks(boxes, _raw_boxes_for_seg, _raw_seg_masks)
+                if seg_masks and settings.segmentation.enabled:
+                    draw_all_masks(
+                        frame, boxes, classes, seg_masks,
+                        alpha=settings.segmentation.mask_alpha,
+                    )
+                _cached_nms_data = (boxes, classes, ids, seg_masks)
                 current_ped_ids: Set[int] = set()
                 current_veh_ids: Set[int] = set()
                 newly_in_polygon: Set[int] = set()
                 newly_in_ped_polygon: Set[int] = set()
-
-                # ── First pass: update track objects ──────────────────────────
-                for box, cls, obj_id in zip(boxes, classes, ids):
-                    obj_id = int(obj_id)
+                for det_i, (box, cls, obj_id) in enumerate(zip(boxes, classes, ids)):
+                    obj_id  = int(obj_id)
+                    det_mask = seg_masks[det_i] if det_i < len(seg_masks) else None
                     x1, y1, x2, y2 = box
                     cx = (x1 + x2) / 2.0
                     cy = (y1 + y2) / 2.0
-
-                    if cls == 0:  # pedestrian
+                    if cls == 0:
                         current_ped_ids.add(obj_id)
                         if obj_id not in ped_tracks:
                             ped_tracks[obj_id] = PedestrianTrack(track_id=obj_id)
@@ -678,6 +528,7 @@ def main():
                         pt.prev_centroid = pt.centroid
                         pt.centroid = (cx, cy)
                         pt.bbox = (x1, y1, x2, y2)
+                        pt.mask = det_mask
                         if pt.prev_centroid is not None:
                             pt.velocity_history.append((
                                 cx - pt.prev_centroid[0],
@@ -690,26 +541,27 @@ def main():
                             default_approach_axis,
                             frame_index,
                         )
-                        if crosswalk.intersects_box(box, min_ratio=0.02):
+                        if crosswalk.intersects_mask_foot(det_mask, frame.shape, box_fallback=box):
                             newly_in_ped_polygon.add(obj_id)
-
-                    else:  # vehicle
+                    else:
                         current_veh_ids.add(obj_id)
                         if obj_id not in veh_tracks:
                             veh_tracks[obj_id] = VehicleTrack(track_id=obj_id)
                         vt = veh_tracks[obj_id]
                         vt.prev_centroid = vt.centroid
                         vt.centroid = (cx, cy)
+                        vt.vehicle_class = int(cls)
+                        vt.mask = det_mask
                         if vt.prev_centroid is not None:
                             vt.velocity_history.append((
                                 cx - vt.prev_centroid[0],
                                 cy - vt.prev_centroid[1],
                             ))
                         vt.centroid_history.append((cx, cy))
-
-                        inside     = crosswalk.intersects_box(box, min_ratio=0.02)
+                        inside = crosswalk.intersects_mask(
+                            det_mask, frame.shape, box_fallback=box,
+                        )
                         was_inside = obj_id in vehicles_in_polygon
-
                         if inside:
                             newly_in_polygon.add(obj_id)
                             if not was_inside:
@@ -725,11 +577,11 @@ def main():
                         else:
                             vt.polygon_entry_frame = None
                             active_violation_cars.discard(obj_id)
-
                 vehicles_in_polygon = newly_in_polygon
-                peds_in_polygon     = newly_in_ped_polygon
-
-                # ── frames_missing counter for active violations ───────────────
+                peds_in_polygon = {
+                    pid for pid, pt in ped_tracks.items()
+                    if pt.state in ("ENTERING", "CROSSING", "CLEARING")
+                }
                 for track_id in list(active_violations.keys()):
                     if track_id in current_veh_ids:
                         active_violations[track_id]["frames_missing"] = 0
@@ -741,15 +593,11 @@ def main():
                                 track_id, active_violations[track_id], enforcement_pipeline
                             )
                             del active_violations[track_id]
-
-                # ── Age out missing pedestrian tracks ─────────────────────────
                 for gone_id in list(ped_tracks.keys()):
                     if gone_id not in current_ped_ids:
                         ped_tracks[gone_id].frames_outside_count += 1
                         if ped_tracks[gone_id].frames_outside_count > TRACK_RESET_FRAMES:
                             del ped_tracks[gone_id]
-
-                # ── Clean up disappeared vehicle tracks ───────────────────────
                 for gone_id in list(veh_tracks.keys()):
                     if gone_id not in current_veh_ids:
                         triggered_pairs -= {p for p in triggered_pairs if p[0] == gone_id}
@@ -760,19 +608,13 @@ def main():
                         wrong_dir_flagged.discard(gone_id)
                         clear_plate_votes(gone_id)
                         del veh_tracks[gone_id]
-                        # active_violations entry kept until frames_missing threshold
-
-                # ── Second pass: violation checks + drawing ───────────────────
-                for box, cls, obj_id in zip(boxes, classes, ids):
+                for det_i, (box, cls, obj_id) in enumerate(zip(boxes, classes, ids)):
                     obj_id = int(obj_id)
                     x1, y1, x2, y2 = box
                     cx = int((x1 + x2) / 2)
                     cy = int((y1 + y2) / 2)
-
-                    if cls != 0:  # vehicle
+                    if cls != 0:
                         vt = veh_tracks.get(obj_id)
-
-                        # ── A: Crosswalk violation ────────────────────────────
                         if (
                             vt is not None
                             and vt.polygon_entry_frame is not None
@@ -793,6 +635,7 @@ def main():
                                 if v is not None:
                                     triggered_pairs.add(pair)
                                     active_violation_cars.add(obj_id)
+                                    vt.last_violation_frame = frame_index
                                     event = build_event(
                                         frame_index=frame_index,
                                         box=box,
@@ -801,7 +644,6 @@ def main():
                                         polygon=polygon,
                                         ped_track=pt,
                                         veh_track=vt,
-                                        # Plate deferred: not visible while car is on crosswalk
                                         plate_number=None,
                                     )
                                     snap_path = _save_violation_snapshot(
@@ -829,9 +671,6 @@ def main():
                                             "last_ocr_frame":     0,
                                             "future":             future,
                                         }
-
-                        # ── B: Wrong-direction detection ──────────────────────
-                        # Gate: ≥8 frames history, centroid inside road Y band, not flagged.
                         if ENABLE_WRONG_DIR and (
                             vt is not None
                             and len(vt.centroid_history) >= 8
@@ -840,120 +679,51 @@ def main():
                         ):
                             if _compute_vehicle_direction(vt) == "REVERSE":
                                 wrong_dir_flagged.add(obj_id)
-
-                                wd_violation = types.SimpleNamespace(
-                                    violation_type="WRONG_DIRECTION",
-                                    severity="HIGH",
-                                )
-                                wd_ped = types.SimpleNamespace(velocity_history=[])
-                                wd_event = build_event(
-                                    frame_index=frame_index,
-                                    box=box,
-                                    car_id=obj_id,
-                                    violation=wd_violation,
-                                    polygon=polygon,
-                                    ped_track=wd_ped,
-                                    veh_track=vt,
-                                    plate_number=None,
-                                )
-                                wd_snap = _save_violation_snapshot(
-                                    frame=frame,
-                                    violation_box=box,
-                                    all_boxes=boxes,
-                                    all_classes=classes,
-                                    polygon=polygon,
-                                    event=wd_event,
-                                )
-                                wd_event.snapshot_path = wd_snap
-                                future = enforcement_pipeline.submit_violation(
-                                    frame.copy(), wd_event
-                                )
-                                if obj_id not in active_violations:
-                                    active_violations[obj_id] = {
-                                        "violation_id":       wd_event.violation_id,
-                                        "violation_type":     "WRONG_DIRECTION",
-                                        "triggered_at_frame": frame_index,
-                                        "best_plate":         None,
-                                        "best_confidence":    0.0,
-                                        "plate_saved":        False,
-                                        "frames_missing":     0,
-                                        "last_seen_frame":    frame_index,
-                                        "last_ocr_frame":     0,
-                                        "future":             future,
-                                    }
-
-                    # ── Drawing ───────────────────────────────────────────────
-                    obj_class = "person" if cls == 0 else "vehicle"
-
                     is_wrong_dir     = cls != 0 and obj_id in wrong_dir_flagged
                     violation_active = cls != 0 and obj_id in active_violation_cars
-
-                    if is_wrong_dir:
-                        box_color = _ORANGE_BGR
-                    elif violation_active:
-                        box_color = (0, 0, 255)
-                    elif cls != 0 and obj_id in vehicles_in_polygon:
-                        box_color = (0, 255, 255)
-                    else:
-                        box_color = (0, 255, 0)
-
-                    draw_box(frame, box, obj_class, box_color)
-
-                    if cls == 0:  # pedestrian labels
+                    det_mask_i = seg_masks[det_i] if det_i < len(seg_masks) else None
+                    if violation_active and det_mask_i is not None:
+                        draw_segmentation_mask(frame, det_mask_i, cls=-1, alpha=0.5,
+                                               color=(0, 0, 220))
+                    elif is_wrong_dir and det_mask_i is not None:
+                        draw_segmentation_mask(frame, det_mask_i, cls=-1, alpha=0.45,
+                                               color=_AMBER_BGR)
+                    lx = max(0, int(x1) + 4)
+                    ly = max(14, int(y1) - 4)
+                    if cls == 0:
                         pt = ped_tracks.get(obj_id)
+                        state_str = pt.state if pt else "?"
+                        _SC = {"OUTSIDE": (50,50,50), "ENTERING": (120,60,0), "CROSSING": (0,90,0), "EXITED": (80,40,0)}
+                        sc = _SC.get(state_str, (40,40,40))
+                        _put_label(frame, f"PED #{obj_id}", lx, ly,       (20,20,20),   (255,255,255))
+                        _put_label(frame, state_str,        lx, ly + 18,  sc,           (255,255,255))
                         if pt:
-                            cv2.putText(frame, pt.state, (cx, cy + 18),
-                                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
                             direction = _ped_direction(pt)
                             if direction != "STATIC":
-                                cv2.putText(frame, direction, (cx, cy - 40),
-                                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
-
-                    else:  # vehicle labels
+                                _put_label(frame, direction, lx, ly + 36, (0,80,120), (0,220,255))
+                    else:
                         vt = veh_tracks.get(obj_id)
-                        state_label = (
-                            "INSIDE" if (vt and vt.polygon_entry_frame is not None) else "OUTSIDE"
-                        )
-                        (tw, _), _ = cv2.getTextSize(state_label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
-                        cv2.putText(frame, state_label, (int(x2) - tw, int(y1) - 5),
-                                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-
+                        cls_name = class_label(int(cls)).upper()
+                        _put_label(frame, f"{cls_name} #{obj_id}", lx, ly, (20,20,20), (255,255,255))
+                        in_zone = vt is not None and vt.polygon_entry_frame is not None
+                        if in_zone:
+                            _put_label(frame, "IN ZONE", lx, ly + 18, (0,80,40), (0,255,180))
                         if violation_active:
-                            cv2.putText(frame, "VIOLATION", (cx, cy - 25),
-                                        cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255), 2)
-
+                            _put_label(frame, "! VIOLATION", lx, cy,     (0, 0, 150), (255, 255, 255))
                         if is_wrong_dir:
-                            # Text overlay above the box
-                            cv2.putText(
-                                frame, "<- WRONG DIR", (int(x1), int(y1) - 10),
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.7, _ORANGE_BGR, 2,
-                            )
-                            # Arrow from trailing centroid → current centroid
-                            if vt is not None and len(vt.centroid_history) >= 2:
-                                hist = list(vt.centroid_history)
-                                tail = (int(hist[-2][0]), int(hist[-2][1]))
-                                head = (int(hist[-1][0]), int(hist[-1][1]))
-                                cv2.arrowedLine(frame, tail, head, _ORANGE_BGR, 2, tipLength=0.4)
-
-                        # ── Deferred plate capture status label ───────────────
+                            _put_label(frame, "WRONG DIR",  lx, cy + 20, (80, 60, 0), (255, 180, 0))
                         if obj_id in active_violations:
                             av = active_violations[obj_id]
                             if av["plate_saved"] and av["best_plate"] not in (None, "UNREAD"):
-                                cap_label = f"PLATE: {av['best_plate']}"
-                                cap_color = (0, 240, 60)    # green — confirmed
+                                _put_label(frame, av["best_plate"], lx, cy + 40,
+                                           (0, 160, 40), (255, 255, 255))
                             elif av["plate_saved"]:
-                                cap_label = "PLATE: UNREAD"
-                                cap_color = (0, 200, 200)
+                                _put_label(frame, "UNREAD", lx, cy + 40,
+                                           (0, 100, 120), (200, 200, 200))
                             else:
-                                cap_label = "CAPTURING..."
-                                cap_color = (0, 220, 255)   # yellow — in progress
-                            cv2.putText(frame, cap_label, (int(x1), int(y2) + 18),
-                                        cv2.FONT_HERSHEY_SIMPLEX, 0.55, cap_color, 2)
-
-                        # ── Plate detection + OCR ─────────────────────────────
-                        # Skip while car is inside the crosswalk zone — plate not
-                        # visible from this camera angle until after exit.
-                        currently_inside = vt is not None and vt.polygon_entry_frame is not None
+                                _put_label(frame, "CAPTURING", lx, cy + 40,
+                                           (0, 130, 180), (255, 255, 255))
+                        currently_inside = in_zone
                         if ENABLE_PLATE_DETECTOR and not currently_inside and plate_detector is not None:
                             x1i, y1i, x2i, y2i = int(x1), int(y1), int(x2), int(y2)
                             x1c = max(0, x1i)
@@ -972,8 +742,6 @@ def main():
                                         )
                                         bw_ok = (x2c - x1c) >= 80
                                         bh_ok = (y2c - y1c) >= 40
-
-                                        # Deferred OCR for violated vehicles
                                         if ENABLE_DEFERRED_OCR and (
                                             obj_id in active_violations
                                             and not active_violations[obj_id]["plate_saved"]
@@ -998,35 +766,10 @@ def main():
                                                     ),
                                                     daemon=True,
                                                 ).start()
-
-                                        # Regular one-shot OCR for non-violated vehicles
-                                        elif ENABLE_REGULAR_OCR and (
-                                            obj_id not in active_violations
-                                            and ocr_engine is not None
-                                            and obj_id not in plate_ocr_pending
-                                            and obj_id not in plate_text_cache
-                                            and bw_ok and bh_ok
-                                        ):
-                                            ppx1o = max(0, int(x1c + px1))
-                                            ppy1o = max(0, int(y1c + py1))
-                                            ppx2o = min(frame.shape[1] - 1, int(x1c + px2))
-                                            ppy2o = min(frame.shape[0] - 1, int(y1c + py2))
-                                            if ppx2o - ppx1o > 8 and ppy2o - ppy1o > 8:
-                                                plate_crop_reg = frame[ppy1o:ppy2o, ppx1o:ppx2o].copy()
-                                                plate_ocr_pending.add(obj_id)
-                                                threading.Thread(
-                                                    target=_run_ocr_for_vehicle,
-                                                    args=(
-                                                        ocr_engine, obj_id, plate_crop_reg,
-                                                        plate_text_cache, plate_ocr_pending,
-                                                    ),
-                                                    daemon=True,
-                                                ).start()
                                     else:
                                         plate_bbox_cache.pop(obj_id, None)
                                 except Exception:
                                     pass
-
                         plate_box  = plate_bbox_cache.get(obj_id)
                         plate_text = plate_text_cache.get(obj_id)
                         if plate_box is not None:
@@ -1043,73 +786,73 @@ def main():
                                 plate_color = (0, 255, 255)
                             cv2.putText(frame, plate_label, (ppx1, ppy1 - 4),
                                         cv2.FONT_HERSHEY_SIMPLEX, 0.45, plate_color, 1)
-
             elif _cached_nms_data is not None:
-                # Inference still running — redraw last known boxes + labels
-                c_boxes, c_classes, c_ids = _cached_nms_data
-                for box, cls, obj_id in zip(c_boxes, c_classes, c_ids):
+                c_boxes, c_classes, c_ids, c_masks = (
+                    _cached_nms_data if len(_cached_nms_data) == 4
+                    else (*_cached_nms_data, [])
+                )
+                if c_masks and settings.segmentation.enabled:
+                    draw_all_masks(
+                        frame, c_boxes, c_classes, c_masks,
+                        alpha=settings.segmentation.mask_alpha,
+                    )
+                for c_i, (box, cls, obj_id) in enumerate(zip(c_boxes, c_classes, c_ids)):
                     obj_id  = int(obj_id)
                     x1, y1, x2, y2 = box
                     cx = int((x1 + x2) / 2)
                     cy = int((y1 + y2) / 2)
-                    obj_class = "person" if cls == 0 else "vehicle"
                     is_wrong_dir     = cls != 0 and obj_id in wrong_dir_flagged
                     violation_active = cls != 0 and obj_id in active_violation_cars
-                    if is_wrong_dir:
-                        box_color = _ORANGE_BGR
-                    elif violation_active:
-                        box_color = (0, 0, 255)
-                    elif cls != 0 and obj_id in vehicles_in_polygon:
-                        box_color = (0, 255, 255)
-                    else:
-                        box_color = (0, 255, 0)
-                    draw_box(frame, box, obj_class, box_color)
-
+                    c_mask_i = c_masks[c_i] if c_i < len(c_masks) else None
+                    if violation_active and c_mask_i is not None:
+                        draw_segmentation_mask(frame, c_mask_i, cls=-1, alpha=0.5,
+                                               color=(0, 0, 220))
+                    elif is_wrong_dir and c_mask_i is not None:
+                        draw_segmentation_mask(frame, c_mask_i, cls=-1, alpha=0.45,
+                                               color=_AMBER_BGR)
+                    lx_c = max(0, int(x1) + 4)
+                    ly_c = max(14, int(y1) - 4)
                     if cls == 0:
                         pt = ped_tracks.get(obj_id)
+                        state_str = pt.state if pt else "?"
+                        _SC = {"OUTSIDE": (50,50,50), "ENTERING": (120,60,0), "CROSSING": (0,90,0), "EXITED": (80,40,0)}
+                        sc = _SC.get(state_str, (40,40,40))
+                        _put_label(frame, f"PED #{obj_id}", lx_c, ly_c,      (20,20,20),  (255,255,255))
+                        _put_label(frame, state_str,        lx_c, ly_c + 18, sc,          (255,255,255))
                         if pt:
-                            cv2.putText(frame, pt.state, (cx, cy + 18),
-                                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+                            direction = _ped_direction(pt)
+                            if direction != "STATIC":
+                                _put_label(frame, direction, lx_c, ly_c + 36, (0,80,120), (0,220,255))
                     else:
                         vt = veh_tracks.get(obj_id)
-                        state_label = "INSIDE" if (vt and vt.polygon_entry_frame is not None) else "OUTSIDE"
-                        (tw, _), _ = cv2.getTextSize(state_label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
-                        cv2.putText(frame, state_label, (int(x2) - tw, int(y1) - 5),
-                                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+                        cls_name = class_label(int(cls)).upper()
+                        _put_label(frame, f"{cls_name} #{obj_id}", lx_c, ly_c, (20,20,20), (255,255,255))
+                        if vt is not None and vt.polygon_entry_frame is not None:
+                            _put_label(frame, "IN ZONE", lx_c, ly_c + 18, (0,80,40), (0,255,180))
                         if violation_active:
-                            cv2.putText(frame, "VIOLATION", (cx, cy - 25),
-                                        cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255), 2)
+                            _put_label(frame, "! VIOLATION", lx_c, cy,     (0, 0, 150), (255, 255, 255))
                         if is_wrong_dir:
-                            cv2.putText(frame, "<- WRONG DIR", (int(x1), int(y1) - 10),
-                                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, _ORANGE_BGR, 2)
+                            _put_label(frame, "WRONG DIR",  lx_c, cy + 20, (80, 60, 0), (255, 180, 0))
                         if obj_id in active_violations:
                             av = active_violations[obj_id]
                             if av["plate_saved"] and av["best_plate"] not in (None, "UNREAD"):
-                                cap_label = f"PLATE: {av['best_plate']}"
-                                cap_color = (0, 240, 60)
+                                _put_label(frame, av["best_plate"], lx_c, cy + 40,
+                                           (0, 160, 40), (255, 255, 255))
                             elif av["plate_saved"]:
-                                cap_label = "PLATE: UNREAD"
-                                cap_color = (0, 200, 200)
+                                _put_label(frame, "UNREAD", lx_c, cy + 40,
+                                           (0, 100, 120), (200, 200, 200))
                             else:
-                                cap_label = "CAPTURING..."
-                                cap_color = (0, 220, 255)
-                            cv2.putText(frame, cap_label, (int(x1), int(y2) + 18),
-                                        cv2.FONT_HERSHEY_SIMPLEX, 0.55, cap_color, 2)
-
+                                _put_label(frame, "CAPTURING", lx_c, cy + 40,
+                                           (0, 130, 180), (255, 255, 255))
             cv2.imshow(WINDOW_NAME, frame)
-
-            # Pace display to source FPS so the video runs at real-time speed.
             now = time.perf_counter()
             budget_left_ms = int((_frame_delay - (now - _last_display_t)) * 1000)
             key = cv2.waitKey(max(1, budget_left_ms)) & 0xFF
             _last_display_t = time.perf_counter()
-
             if key == 27:
                 print("[INFO] Stopped by user (ESC).")
                 break
-
             elif key in (ord('r'), ord('R')):
-                # ── Re-draw polygon ──────────────────────────────────────────────
                 print("[INFO] Entering polygon re-draw mode — left-click to add points, right-click to finish.")
                 editor.points.clear()
                 editor.done = False
@@ -1137,18 +880,13 @@ def main():
                     print("[INFO] Polygon updated.")
                 else:
                     print("[INFO] Polygon re-draw cancelled.")
-
     finally:
-        # Finalise any violations still awaiting plate capture before shutdown
         for track_id, av in list(active_violations.items()):
             _finalise_active_violation(track_id, av, enforcement_pipeline)
         active_violations.clear()
-
         worker.stop()
         enforcement_pipeline.shutdown()
         cap.release()
         cv2.destroyAllWindows()
-
-
 if __name__ == "__main__":
     main()

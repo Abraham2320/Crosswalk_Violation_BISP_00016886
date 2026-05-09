@@ -1170,6 +1170,89 @@ static/snapshots/snapshot_<violation_id>_<frame_index>.jpg
 
 ---
 
+## Audit & Accuracy
+
+Phase 1 introduced a structured audit system and several low-level accuracy improvements.
+
+### Audit Infrastructure
+
+| Component | Location | Purpose |
+|-----------|----------|---------|
+| `EventLogger` / `NullLogger` | `src/audit/event_logger.py` | Thread-safe JSONL event sink; swap to NullLogger when `AUDIT_ENABLED=0` |
+| `AuditBuffer` | `src/audit/audit_buffer.py` | Rolling deque that captures a pre/post clip around every violation trigger |
+| Audit web UI | `audit_ui.py` (Blueprint `/audit`) | Dark Tailwind UI — lists videos/clips, interactive HTML5 review player with keyboard shortcuts and finding form |
+| Report generator | `audit_report.py` | CLI: `python audit_report.py [findings.csv]` → Markdown + JSON report in `audit/reports/` |
+| Replay harness | `replay.py` | CLI: `python replay.py --video path.mp4 --out runs/v1/` — replays a video through the full axis-aware pipeline |
+| Categories | `audit/categories.json` | 6 top-level error categories (detection, tracking, stabilisation, logic, ocr, environmental) |
+
+#### Running the Audit UI
+
+```bash
+python app.py          # starts Flask; open http://localhost:5000/audit
+```
+
+#### Running the Replay Harness
+
+```bash
+python replay.py --video Videos/sample.mp4 --out runs/v1/
+python replay.py --video Videos/sample.mp4 --groundtruth groundtruth.csv --out runs/v1/
+```
+
+#### Generating an Audit Report
+
+```bash
+python audit_report.py                      # uses AUDIT_FINDINGS_CSV from .env
+python audit_report.py audit/findings.csv   # explicit path
+```
+
+### Accuracy Improvements
+
+| Improvement | Location | Config Variable |
+|-------------|----------|-----------------|
+| CLAHE histogram equalisation for low-light scenes | `src/vision/preprocessing.py` | `CLAHE_ENABLED`, `CLAHE_CLIP_LIMIT`, `CLAHE_TILE_SIZE` |
+| Glare mask — suppresses detections inside blown-out regions | `src/vision/preprocessing.py` | `GLARE_DETECTION_ENABLED`, `GLARE_LUMINANCE_THRESHOLD`, `GLARE_REJECT_THRESHOLD` |
+| Lucas-Kanade optical flow fallback for stabiliser | `src/vision/stabilizer.py` | `ORB_MIN_MATCHES` |
+| Axis-aware pedestrian & vehicle tracking (Kalman-smoothed) | `src/logic/violation.py` | — |
+| Multi-frame violation confirmation | `src/logic/violation.py` `check_violation_axis()` | `VIOLATION_CONFIRM_FRAMES` |
+| Stationary pedestrian filter | `src/logic/violation.py` | `PED_MIN_FRAMES_TO_QUALIFY` |
+| Grace-frame window after pedestrian leaves zone | `src/logic/violation.py` | `VIOLATION_GRACE_FRAMES` |
+
+### New Environment Variables
+
+```
+# Audit
+AUDIT_ENABLED=1
+AUDIT_LOG_DIR=audit/logs
+AUDIT_CLIP_DIR=audit/clips
+AUDIT_VIDEO_DIR=Videos
+AUDIT_SNAPSHOT_DIR=artifacts/frames
+AUDIT_FINDINGS_CSV=audit/findings.csv
+AUDIT_CATEGORIES_PATH=audit/categories.json
+AUDIT_CLIP_PRE_FRAMES=90
+AUDIT_CLIP_POST_FRAMES=60
+
+# CLAHE
+CLAHE_ENABLED=1
+CLAHE_CLIP_LIMIT=2.0
+CLAHE_TILE_SIZE=8
+
+# Glare
+GLARE_DETECTION_ENABLED=1
+GLARE_LUMINANCE_THRESHOLD=220
+GLARE_REJECT_THRESHOLD=0.4
+
+# Stabiliser
+ORB_MIN_MATCHES=12
+STAB_MATCH_WARNING_THRESHOLD=8
+
+# Violation logic
+VIOLATION_CONFIRM_FRAMES=4
+PED_MIN_FRAMES_TO_QUALIFY=3
+VIOLATION_GRACE_FRAMES=2
+```
+
+---
+
 ## Demo Data
 
 `generate_demo_data.py` seeds the database with realistic Tashkent crosswalk violations:

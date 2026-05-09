@@ -150,9 +150,11 @@
               </td>
               <td>
                 {% if v.violation_type == 'FAILED_TO_YIELD' %}
-                  <span style="font-size:12px; color:var(--accent-red);">{{ t('common.failed_to_yield') }}</span>
+                  <span class="badge badge-yield">{{ t('common.failed_to_yield') }}</span>
                 {% elif v.violation_type == 'UNSAFE_REENTRY' %}
-                  <span style="font-size:12px; color:var(--accent-amber);">{{ t('common.unsafe_reentry') }}</span>
+                  <span class="badge badge-reentry">{{ t('common.unsafe_reentry') }}</span>
+                {% elif v.violation_type == 'WRONG_DIRECTION' %}
+                  <span class="badge badge-wrongdir">Wrong Dir</span>
                 {% else %}
                   <span style="font-size:12px; color:var(--text-muted);">{{ v.violation_type or '—' }}</span>
                 {% endif %}
@@ -216,8 +218,6 @@
   </div>
 
 </div>
-
-
 
 <!-- Pass hourly data to JS -->
 <script>window.HOURLY_DATA = {{ hourly_data | tojson }};</script>

@@ -150,11 +150,13 @@
             </td>
             <td style="font-size:13px;">
               {% if v.violation_type == 'FAILED_TO_YIELD' %}
-                <span style="color:var(--accent-red);">{{ t('common.failed_to_yield') }}</span>
+                <span class="badge badge-yield">{{ t('common.failed_to_yield') }}</span>
               {% elif v.violation_type == 'UNSAFE_REENTRY' %}
-                <span style="color:var(--accent-amber);">{{ t('common.unsafe_reentry') }}</span>
+                <span class="badge badge-reentry">{{ t('common.unsafe_reentry') }}</span>
+              {% elif v.violation_type == 'WRONG_DIRECTION' %}
+                <span class="badge badge-wrongdir">Wrong Dir</span>
               {% else %}
-                {{ v.violation_type or '—' }}
+                <span class="badge" style="border-color:var(--border);">{{ v.violation_type or '—' }}</span>
               {% endif %}
             </td>
             <td>
@@ -168,7 +170,7 @@
               {{ v.display_location or '—' }}
             </td>
             <td>
-              {# Confidence bar trick #}
+              
               {% set conf_pct = (v.confidence * 100) | round | int %}
               {% if conf_pct >= 80 %}{% set conf_color = 'var(--accent-green)' %}
               {% elif conf_pct >= 50 %}{% set conf_color = 'var(--accent-amber)' %}
@@ -199,7 +201,6 @@
   {% if total_pages > 1 %}
   <div class="pagination">
 
-    {# Build base query string without page #}
     {% set base_args = dict(
          severity=filters.severity,
          violation_type=filters.violation_type,

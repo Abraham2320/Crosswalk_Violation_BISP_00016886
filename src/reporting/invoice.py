@@ -1,41 +1,28 @@
 from __future__ import annotations
-
 from pathlib import Path
-
 from config import AppSettings
 from schemas import ReportPayload
-
 _STATIC = Path(__file__).parent.parent.parent / "static"
-
-
 def _resolve_image(rel_path: str | None) -> Path | None:
-    """Return absolute path if the image file exists, else None."""
     if not rel_path:
         return None
     p = _STATIC / rel_path
     return p if p.exists() else None
-
-
 class InvoiceGenerator:
     def __init__(self, settings: AppSettings):
         self.settings = settings
-
     def generate(self, payload: ReportPayload) -> Path:
         try:
             return self._generate_pdf(payload)
         except ModuleNotFoundError:
             return self._generate_text(payload)
-
     def _generate_pdf(self, payload: ReportPayload) -> Path:
-        from reportlab.lib.pagesizes import LETTER          # type: ignore
-        from reportlab.lib.utils import ImageReader         # type: ignore
-        from reportlab.pdfgen import canvas                 # type: ignore
-
+        from reportlab.lib.pagesizes import LETTER
+        from reportlab.lib.utils import ImageReader
+        from reportlab.pdfgen import canvas
         invoice_path = self.settings.storage.invoices_dir / f"{payload.violation_id}.pdf"
-        W, H = LETTER   # 612 × 792 pts
+        W, H = LETTER
         pdf = canvas.Canvas(str(invoice_path), pagesize=LETTER)
-
-        # ── Header ──────────────────────────────────────────────────────────────
         pdf.setFillColorRGB(0.10, 0.10, 0.10)
         pdf.rect(0, H - 60, W, 60, fill=1, stroke=0)
         pdf.setFillColorRGB(1, 1, 1)
@@ -43,8 +30,6 @@ class InvoiceGenerator:
         pdf.drawString(36, H - 38, self.settings.runtime.authority_name)
         pdf.setFont("Helvetica", 9)
         pdf.drawRightString(W - 36, H - 38, "TRAFFIC VIOLATION NOTICE")
-
-        # ── Violation details ────────────────────────────────────────────────────
         pdf.setFillColorRGB(0.1, 0.1, 0.1)
         y = H - 90
         pdf.setFont("Helvetica-Bold", 12)
@@ -58,8 +43,6 @@ class InvoiceGenerator:
         pdf.drawString(36, y, f"Location:      {payload.location}  [{payload.location_code}]")
         y -= 18
         pdf.drawString(36, y, f"Authority:     {payload.authority_name}")
-
-        # ── Plate section ────────────────────────────────────────────────────────
         y -= 30
         pdf.setFillColorRGB(0.94, 0.94, 0.94)
         pdf.rect(30, y - 8, W - 60, 30, fill=1, stroke=0)
@@ -68,8 +51,6 @@ class InvoiceGenerator:
         plate_display = payload.plate_number if payload.plate_number != "UNREADABLE" else "— UNREADABLE —"
         pdf.drawString(36, y + 6, f"License Plate:  {plate_display}")
         y -= 14
-
-        # Plate crop image
         plate_img_path = _resolve_image(payload.plate_crop_path)
         if plate_img_path:
             try:
@@ -87,8 +68,6 @@ class InvoiceGenerator:
                 y -= 18
             except Exception:
                 pass
-
-        # ── Fine ────────────────────────────────────────────────────────────────
         y -= 22
         pdf.setFillColorRGB(0.85, 0.12, 0.12)
         pdf.setFont("Helvetica-Bold", 13)
@@ -97,8 +76,6 @@ class InvoiceGenerator:
         pdf.setFont("Helvetica", 10)
         y -= 16
         pdf.drawString(36, y, "Payment due within 30 days of this notice.")
-
-        # ── Incident snapshot ────────────────────────────────────────────────────
         snap_path = _resolve_image(payload.snapshot_path)
         if snap_path:
             try:
@@ -109,7 +86,7 @@ class InvoiceGenerator:
                 img = ImageReader(str(snap_path))
                 iw, ih = img.getSize()
                 max_w = W - 72
-                max_h = min(y - 50, 220)   # leave 50pt margin at bottom
+                max_h = min(y - 50, 220)
                 scale = min(max_w / max(iw, 1), max_h / max(ih, 1))
                 dw, dh = iw * scale, ih * scale
                 y -= dh + 4
@@ -118,15 +95,11 @@ class InvoiceGenerator:
                                   preserveAspectRatio=True, mask='auto')
             except Exception:
                 pass
-
-        # ── Footer ──────────────────────────────────────────────────────────────
         pdf.setFont("Helvetica", 8)
         pdf.setFillColorRGB(0.5, 0.5, 0.5)
         pdf.drawCentredString(W / 2, 28, f"ID: {payload.violation_id}")
-
         pdf.save()
         return invoice_path
-
     def _generate_text(self, payload: ReportPayload) -> Path:
         invoice_path = self.settings.storage.invoices_dir / f"{payload.violation_id}.txt"
         plate_line = f"Plate Number:   {payload.plate_number}"

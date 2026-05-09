@@ -1,0 +1,13 @@
+[theme]
+base            = "dark"
+primaryColor    = "#2563C8"          # dark blue accent
+backgroundColor = "#060C18"          # deep navy-black
+secondaryBackgroundColor = "#0D1426" # card / sidebar bg
+textColor       = "#D6DFF0"          # cool-white text
+font            = "sans serif"
+
+[browser]
+gatherUsageStats = false
+
+[server]
+headless = true

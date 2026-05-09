@@ -26,7 +26,6 @@
       {% set chartW = W - padL - padR %}
       {% set chartH = H - padT - padB %}
 
-      {# Build polyline points #}
       {% set ns = namespace(pts='', fill='') %}
       {% for d in daily_counts %}
         {% set x = padL + (loop.index0 / (pts_count - 1 if pts_count > 1 else 1)) * chartW %}
@@ -34,7 +33,7 @@
         {% set ns.pts = ns.pts + x|round(1)|string + ',' + y|round(1)|string + ' ' %}
         {% set ns.fill = ns.fill + x|round(1)|string + ',' + y|round(1)|string + ' ' %}
       {% endfor %}
-      {# Close fill path #}
+      
       {% set last_x = padL + chartW %}
       {% set last_y = padT + chartH %}
       {% set first_x = padL %}
@@ -83,7 +82,7 @@
       {% for h in range(24) %}
         {% set cnt = hourly_heatmap.get(h, 0) %}
         {% set ratio = cnt / max_h if max_h > 0 else 0 %}
-        {# Interpolate near-black to amber: #0F1117 → #F59E0B #}
+        
         {% set r = (15 + (245-15) * ratio)|round|int %}
         {% set g = (17 + (158-17) * ratio)|round|int %}
         {% set b = (23 + (11-23) * ratio)|round|int %}
