@@ -222,6 +222,7 @@ class LiveProcessor:
         self._plate_ocr_pending: Set[int] = set()
         self._wrong_dir_flagged: Set[int] = set()
         self._post_viol_collectors: Dict[int, dict] = {}
+        self._plate_last_detect: Dict[int, int] = {}
         self._ped_tracks:         Dict = {}
         self._veh_tracks:         Dict = {}
         self._vehicles_in_polygon: Set[int] = set()
@@ -473,7 +474,7 @@ class LiveProcessor:
         except Exception as _clahe_exc:
             print(f"[LiveProcessor:{self._cam_id}] CLAHE unavailable: {_clahe_exc}")
             self._clahe = None
-        self._detect_every = max(1, int(os.getenv("LIVE_DETECT_EVERY_N_FRAMES", "1")))
+        self._detect_every = max(1, int(os.getenv("LIVE_DETECT_EVERY_N_FRAMES", "2")))
         self.reload_polygon()
     def _reset_tracks(self) -> None:
         self._ped_tracks.clear()
@@ -486,6 +487,7 @@ class LiveProcessor:
         self._plate_ocr_pending.clear()
         self._wrong_dir_flagged.clear()
         self._post_viol_collectors.clear()
+        self._plate_last_detect.clear()
         self._frame_index = 0
         self.ped_total = self.veh_total = 0
         self.ped_in_zone = self.veh_in_zone = 0
@@ -683,7 +685,7 @@ class LiveProcessor:
                 pt.centroid = (cx, cy)
                 pt.bbox = (x1, y1, x2, y2)
                 pt.mask = det_mask
-                if pt.prev_centroid is not None:
+                if got_new_detection and pt.prev_centroid is not None:
                     pt.velocity_history.append((
                         cx - pt.prev_centroid[0],
                         cy - pt.prev_centroid[1],
@@ -702,12 +704,13 @@ class LiveProcessor:
                 vt.frames_outside_count = 0
                 vt.vehicle_class = int(cls)
                 vt.mask = det_mask
-                if vt.prev_centroid is not None:
+                if got_new_detection and vt.prev_centroid is not None:
                     vt.velocity_history.append((
                         cx - vt.prev_centroid[0],
                         cy - vt.prev_centroid[1],
                     ))
-                vt.centroid_history.append((cx, cy))
+                if got_new_detection:
+                    vt.centroid_history.append((cx, cy))
                 inside = (
                     crosswalk is not None
                     and crosswalk.intersects_mask(det_mask, frame.shape, box_fallback=box)
@@ -770,6 +773,7 @@ class LiveProcessor:
                     and vt.polygon_entry_frame is not None
                     and (self._frame_index - vt.polygon_entry_frame) <= ENTRY_EVAL_WINDOW_FRAMES
                     and _vehicle_speed(vt) >= _MIN_MOVING_SPEED_PX
+                    and obj_id not in self._active_viol_cars
                 ):
                     for ped_id, pt in self._ped_tracks.items():
                         pair = (obj_id, ped_id)
@@ -853,7 +857,16 @@ class LiveProcessor:
                 if violation_active:
                     cv2.putText(frame, "! VIOLATION", (lx, int(cy)), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0,0,0), 4, cv2.LINE_AA)
                     cv2.putText(frame, "! VIOLATION", (lx, int(cy)), cv2.FONT_HERSHEY_SIMPLEX, 0.9, _RED,    2, cv2.LINE_AA)
-                if got_new_detection and self._plate_detector is not None:
+                _plate_eligible = (
+                    obj_id in self._vehicles_in_polygon
+                    or obj_id in self._active_viol_cars
+                    or obj_id in self._post_viol_collectors
+                )
+                _plate_due = (
+                    self._frame_index - self._plate_last_detect.get(obj_id, -999) >= 8
+                )
+                if got_new_detection and self._plate_detector is not None and _plate_eligible and _plate_due:
+                    self._plate_last_detect[obj_id] = self._frame_index
                     x1i, y1i, x2i, y2i = int(x1), int(y1), int(x2), int(y2)
                     x1c = max(0, x1i); y1c = max(0, y1i)
                     x2c = min(w - 1, x2i); y2c = min(h - 1, y2i)

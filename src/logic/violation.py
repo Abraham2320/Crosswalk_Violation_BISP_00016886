@@ -15,7 +15,7 @@ TRACK_RESET_FRAMES: int = 90
 YIELD_MIN_SAMPLES: int = 4
 MIN_PED_ACTIVE_FRAMES: int = int(os.getenv("MIN_PED_ACTIVE_FRAMES", "6"))
 VEHICLE_COOLDOWN_FRAMES: int = int(os.getenv("VEHICLE_COOLDOWN_FRAMES", "60"))
-VIOLATION_CONFIRM_FRAMES: int = int(os.getenv("VIOLATION_CONFIRM_FRAMES", "3"))
+VIOLATION_CONFIRM_FRAMES: int = int(os.getenv("VIOLATION_CONFIRM_FRAMES", "2"))
 @dataclass
 class Violation:
     car_id: int

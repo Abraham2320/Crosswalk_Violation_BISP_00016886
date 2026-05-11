@@ -88,7 +88,7 @@ class SegmentationSettings:
     seg_model_path: str = os.getenv("SEG_MODEL_PATH", "yolov8l-seg.pt")
     mask_alpha: float = float(os.getenv("MASK_ALPHA", "0.35"))
     mask_min_ratio: float = float(os.getenv("MASK_MIN_RATIO", "0.02"))
-    run_every_n_frames: int = int(os.getenv("SEG_EVERY_N_FRAMES", "3"))
+    run_every_n_frames: int = int(os.getenv("SEG_EVERY_N_FRAMES", "5"))
 
 @dataclass(slots=True)
 class AppSettings:
